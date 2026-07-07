@@ -28,8 +28,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-ACCESS_PRIORITY = {"read": 1, "write": 2, "delete": 3, "none": 4,  "upload": 5,"download": 6,"full_control": 7}
-
 User = get_user_model()
 
 # ----------------------------------
@@ -102,13 +100,20 @@ def user_detail(request, pk):
 @csrf_exempt
 def login_send_otp(request):
     email = request.data.get('email')
-    if not email:
-        return Response({'detail': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
+    password = request.data.get('password')
+    if not email or not password:
+        return Response({'detail': 'Email and password are required'}, status=status.HTTP_400_BAD_REQUEST)
 
-    try:
-        user = User.objects.get(email=email)
-    except User.DoesNotExist:
-        return Response({'detail': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+    # authenticate() also rejects inactive users; the response is identical
+    # for unknown emails and wrong passwords to prevent user enumeration.
+    user = authenticate(request, username=email, password=password)
+    if user is None:
+        try:
+            attempted = User.objects.get(email=email)
+            log_action(attempted, 'login_failed', ip=request.META.get('REMOTE_ADDR'))
+        except User.DoesNotExist:
+            pass
+        return Response({'detail': 'Invalid email or password'}, status=status.HTTP_400_BAD_REQUEST)
 
     otp_code = get_random_string(length=6, allowed_chars='0123456789')
 
@@ -127,44 +132,24 @@ def login_send_otp(request):
             [email],
             fail_silently=False,
         )
+        log_action(user, 'otp_sent', ip=request.META.get('REMOTE_ADDR'))
         return Response({'detail': 'OTP sent successfully'})
     except Exception as e:
         logger.error(f"OTP email send failed: {e}", exc_info=True)
-        # Optional: delete OTP record if email send failed
         otp_instance.delete()
         return Response({'detail': 'Failed to send OTP'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
-@permission_classes([permissions.AllowAny])  # Allow unauthenticated access here
-@csrf_exempt
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def login_verify_otp(request):
-    email = request.data.get('email')
-    otp_code = request.data.get('otp')
+@permission_classes([permissions.IsAuthenticated])
+def logout_view(request):
+    # 'logout' is part of the login→delete→logout sequence the detectors watch
+    log_action(request.user, 'logout', ip=request.META.get('REMOTE_ADDR'))
+    return Response({'detail': 'Logged out'})
 
-    if not email or not otp_code:
-        return Response({'detail': 'Email and OTP are required'}, status=status.HTTP_400_BAD_REQUEST)
 
-    try:
-        user = User.objects.get(email=email)
-    except User.DoesNotExist:
-        return Response({'detail': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-
-    # Find a valid OTP record for this user with matching code and not expired
-    otp_instance = OTP.objects.filter(user=user, code=otp_code, expires_at__gte=timezone.now()).first()
-
-    if not otp_instance:
-        return Response({'detail': 'Invalid or expired OTP'}, status=status.HTTP_400_BAD_REQUEST)
-
-    # OTP is valid, so delete it (or you can mark it used in your model)
-    otp_instance.delete()
-
-    # You may want to set a flag on user or issue a token here, for now:
-    return Response({'detail': 'OTP verified successfully'}, status=status.HTTP_200_OK)
-
-logger = logging.getLogger(__name__)
+OTP_MAX_FAILURES = 5
+OTP_FAILURE_WINDOW_MINUTES = 15
 
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
@@ -176,65 +161,40 @@ def verify_otp_and_token(request):
         if not email or not code:
             return Response({'detail': 'Email and OTP are required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        user = get_object_or_404(User, email=email)
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({'detail': 'Invalid or expired OTP'}, status=status.HTTP_400_BAD_REQUEST)
 
-        otp = OTP.objects.filter(user=user, code=code).latest('created_at')
+        # Lock out after repeated failures so a 6-digit code cannot be brute-forced
+        window_start = timezone.now() - timedelta(minutes=OTP_FAILURE_WINDOW_MINUTES)
+        recent_failures = AuditLog.objects.filter(
+            actor=user, action='otp_failed', timestamp__gte=window_start
+        ).count()
+        if recent_failures >= OTP_MAX_FAILURES:
+            return Response(
+                {'detail': 'Too many failed attempts. Try again later.'},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
 
-        if not otp.is_valid():
-            return Response({'detail': 'OTP expired or invalid'}, status=status.HTTP_400_BAD_REQUEST)
+        otp = OTP.objects.filter(user=user, code=code, expires_at__gte=timezone.now()).first()
+        if otp is None:
+            log_action(user, 'otp_failed', ip=request.META.get('REMOTE_ADDR'))
+            return Response({'detail': 'Invalid or expired OTP'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Single-use: consume this OTP and any stale ones for the user
+        OTP.objects.filter(user=user).delete()
 
         tokens = get_tokens_for_user(user)
 
-        log_action(user, 'otp_verified', ip=request.META.get('REMOTE_ADDR'))
+        # 'login' is the action name the detection engine watches for
+        log_action(user, 'login', ip=request.META.get('REMOTE_ADDR'))
 
         return Response({'tokens': tokens, 'user': UserSerializer(user).data})
 
-    except OTP.DoesNotExist:
-        return Response({'detail': 'OTP not found'}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         logger.error(f"Error in verify_otp_and_token: {e}", exc_info=True)
         return Response({'detail': 'Internal server error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-# ----------------------------------
-# RESOURCE ACCESS
-# ----------------------------------
-def highest_access_level_for_user_and_resource(user, resource):
-    levels = []
-
-    try:
-        if user.department and resource.department and user.department == resource.department:
-            levels += list(AccessControl.objects.filter(
-                resource=resource, group__in=user.groups.all()
-            ).values_list('access_level', flat=True))
-
-        levels += list(AccessControl.objects.filter(
-            resource=resource, group__in=user.groups.all(), department__isnull=True
-        ).values_list('access_level', flat=True))
-
-    except Exception as e:
-        logger.error(f"Error checking access levels: {e}", exc_info=True)
-
-    return max(levels, key=lambda l: ACCESS_PRIORITY.get(l, 0), default=None)
-
-
-@api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
-def serve_resource(request, resource_id):
-    try:
-        resource = Resource.objects.get(pk=resource_id)
-    except Resource.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
-
-    access_level = highest_access_level_for_user_and_resource(request.user, resource)
-    if not access_level:
-        return Response({'detail': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
-
-    file_path = os.path.join(settings.MEDIA_ROOT, resource.path)
-    if not os.path.exists(file_path):
-        return Response({'detail': 'File not found'}, status=status.HTTP_404_NOT_FOUND)
-
-    return FileResponse(open(file_path, 'rb'))
-
-
 # ----------------------------------
 # RESOURCES MANAGEMENT
 # ----------------------------------
@@ -325,19 +285,6 @@ def upload_resource(request):
     return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
-def assign_resource_access(request):
-    user_id = request.data.get("user_id")
-    resource_id = request.data.get("resource_id")
-
-    if not user_id or not resource_id:
-        return Response({"error": "user_id and resource_id are required"}, status=status.HTTP_400_BAD_REQUEST)
-
-    # TODO: Implement access assignment logic
-    return Response({"message": f"Resource {resource_id} assigned to user {user_id}"}, status=status.HTTP_200_OK)
-
-
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def download_resource(request, pk):
@@ -346,6 +293,8 @@ def download_resource(request, pk):
     perm = RoleEnforcer()
     # has_object_permission returns True/False
     if not perm.has_object_permission(request, None, resource):
+        # 'unauthorized_access' is the action name the detection engine watches for
+        log_action(request.user, 'unauthorized_access', resource=resource, ip=request.META.get('REMOTE_ADDR'))
         return Response({'detail': 'Access denied'}, status=403)
 
     file_path = os.path.join(settings.MEDIA_ROOT, resource.path)
@@ -369,21 +318,6 @@ class AuditLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = AuditLog
         fields = ['user', 'action', 'timestamp']  # or your real model fields
-
-@api_view(['PUT', 'PATCH'])
-@permission_classes([permissions.IsAuthenticated])
-def update_user(request, pk):
-    try:
-        user = User.objects.get(pk=pk)
-    except User.DoesNotExist:
-        return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
-
-    serializer = UserSerializer(user, data=request.data, partial=True)
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
@@ -415,18 +349,7 @@ class ResourceViewSet(viewsets.ModelViewSet):
 
         resource = serializer.save(created_by=user, department=dept)
 
-        # Create role-based ResourceAccess defaults if desired (optional):
-        # e.g., ensure managers get write, employees get read - implement as you wish
-
-        # Always give owner full_control via ResourceAccess (user-specific)
-        ResourceAccess.objects.create(
-            resource=resource,
-            role=None,   # null role to indicate user-specific? If your model requires role non-null, skip role and set user on AccessControl below
-            # If your ResourceAccess requires role non-null, instead create AccessControl for the user:
-        )
-
-        # Create AccessControl (user-specific) giving owner full control
-        from .models import AccessControl
+        # Owner gets full control (RoleEnforcer also short-circuits on created_by)
         AccessControl.objects.create(user=user, resource=resource, permission='full_control')
 
         log_action(user, 'create_resource', resource=resource, ip=self.request.META.get('REMOTE_ADDR'))
@@ -479,6 +402,7 @@ def update_resource(request, pk):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['PUT', 'PATCH'])
+@permission_classes([permissions.IsAuthenticated])
 def update_user(request, pk):
     try:
         user = User.objects.get(pk=pk)
