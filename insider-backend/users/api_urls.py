@@ -24,6 +24,7 @@ urlpatterns = [
     path('resource/assign-access/', views.assign_resource_access, name='assign_resource_access'),
     path('resource/<int:pk>/delete/', views.delete_resource, name='delete_resource'),
     path('resource/<int:pk>/update/', views.update_resource, name='update_resource'),
+    path('roles/', views.list_roles, name='list_roles'),
     path('logout/', views.logout_view, name='logout'),
     path('audit/logs/', views.audit_logs, name='audit_logs'),
     path('csrf/', views.csrf_token_view, name='csrf_token'),

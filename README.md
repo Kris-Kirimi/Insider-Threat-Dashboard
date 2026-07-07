@@ -90,7 +90,7 @@ insider-backend/            Django project
   insiderbackend/           settings, urls, celery app
   users/                    custom user model, auth/OTP, resources, RBAC, audit log
   monitoring/               alerts, detection engine, ML training/inference
-  files/, accesscontrol/    legacy apps (kept for migrations)
+  files/, accesscontrol/    sample-file storage and per-user resource access models
 insider-threat-dashboard/   Next.js frontend
 ```
 

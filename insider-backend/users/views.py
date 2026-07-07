@@ -321,6 +321,17 @@ class AuditLogSerializer(serializers.ModelSerializer):
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
+def list_roles(request):
+    """Roles for the EditAccessDialog role-assignment dropdown."""
+    roles = Role.objects.select_related('department').order_by('department__name', 'name')
+    return Response([
+        {'id': r.id, 'name': f"{r.name} ({r.department.name})"}
+        for r in roles
+    ])
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
 def list_groups(request):
     groups = Group.objects.all()
     serializer = GroupSerializer(groups, many=True)
