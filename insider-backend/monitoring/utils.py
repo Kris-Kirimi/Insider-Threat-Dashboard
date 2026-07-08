@@ -20,28 +20,40 @@ User = get_user_model()
 # Don't re-raise the same user/action alert more often than this.
 ALERT_DEDUP_MINUTES = 60
 
+# Escalation: this many distinct alert types for one user within the
+# window collapses into a single critical alert.
+ESCALATION_DISTINCT_ALERTS = 3
+ESCALATION_WINDOW_MINUTES = 60
 
-def _create_alert(user, action, description, severity):
+
+def _create_alert(user, action, description, severity, related_logs=None):
     """Create an alert unless the same user/action alerted recently."""
     window_start = timezone.now() - timedelta(minutes=ALERT_DEDUP_MINUTES)
     if Alert.objects.filter(user=user, action=action, timestamp__gte=window_start).exists():
         return None
     alert = Alert.objects.create(
-        user=user, action=action, description=description, severity=severity
+        user=user,
+        action=action,
+        description=description,
+        severity=severity,
+        related_logs=list(related_logs or []),
     )
     logger.warning("Alert created: %s for user %s", action, user)
     return alert
 
 
 def _users_exceeding(action_filter, threshold, window_minutes):
-    """Return users with more than `threshold` matching logs in the window."""
+    """Users with more than `threshold` matching logs in the window.
+
+    Returns {user: [log_id, ...]} so alerts can carry their evidence.
+    """
     window_start = timezone.now() - timedelta(minutes=window_minutes)
     logs = AuditLog.objects.filter(timestamp__gte=window_start, **action_filter)
-    counts = defaultdict(int)
+    per_user = defaultdict(list)
     for log in logs.select_related('actor'):
         if log.actor:
-            counts[log.actor] += 1
-    return {user: count for user, count in counts.items() if count > threshold}
+            per_user[log.actor].append(log.id)
+    return {user: ids for user, ids in per_user.items() if len(ids) > threshold}
 
 
 def detect_failed_otp_bruteforce(threshold=5, window_minutes=15):
@@ -55,15 +67,18 @@ def detect_rapid_logins(threshold=5, window_minutes=10):
 
 
 def detect_unusual_hours_login(start_hour=0, end_hour=6, window_minutes=15):
-    """Logins between start_hour and end_hour local time, in the recent window."""
+    """Logins between start_hour and end_hour local time, in the recent window.
+
+    Returns {user: [log_id, ...]}.
+    """
     window_start = timezone.now() - timedelta(minutes=window_minutes)
-    flagged = []
+    per_user = defaultdict(list)
     logs = AuditLog.objects.filter(action='login', timestamp__gte=window_start)
     for log in logs.select_related('actor'):
         local_hour = timezone.localtime(log.timestamp).hour
         if log.actor and start_hour <= local_hour < end_hour:
-            flagged.append(log.actor)
-    return flagged
+            per_user[log.actor].append(log.id)
+    return dict(per_user)
 
 
 def detect_excessive_downloads(threshold=5, window_minutes=5):
@@ -72,74 +87,103 @@ def detect_excessive_downloads(threshold=5, window_minutes=5):
 
 
 def detect_unauthorized_access(window_minutes=15):
-    """Denied resource accesses logged by the permission layer."""
+    """Denied resource accesses logged by the permission layer.
+
+    Returns {user: [log_id, ...]}.
+    """
     window_start = timezone.now() - timedelta(minutes=window_minutes)
-    return list(
-        AuditLog.objects.filter(action='unauthorized_access', timestamp__gte=window_start)
-        .exclude(actor=None)
-        .select_related('actor')
-    )
+    per_user = defaultdict(list)
+    logs = AuditLog.objects.filter(action='unauthorized_access', timestamp__gte=window_start) \
+                           .exclude(actor=None).select_related('actor')
+    for log in logs:
+        per_user[log.actor].append(log.id)
+    return dict(per_user)
 
 
 def detect_suspicious_sequences(window_minutes=10):
-    """login → delete → logout inside the window: possible evidence removal."""
+    """login → delete → logout inside the window: possible evidence removal.
+
+    Returns {user: [log_id, ...]} where the ids are the matched sequence steps.
+    """
     window_start = timezone.now() - timedelta(minutes=window_minutes)
     logs = AuditLog.objects.filter(timestamp__gte=window_start).order_by('timestamp')
-    actions_by_user = defaultdict(list)
+    by_user = defaultdict(list)
     for log in logs.select_related('actor'):
         if log.actor:
-            actions_by_user[log.actor].append(log.action.lower())
-    flagged = []
-    for user, names in actions_by_user.items():
+            by_user[log.actor].append((log.action.lower(), log.id))
+    flagged = {}
+    for user, entries in by_user.items():
+        names = [name for name, _ in entries]
         try:
             i_login = names.index('login')
             i_delete = next(i for i in range(i_login + 1, len(names)) if 'delete' in names[i])
-            next(i for i in range(i_delete + 1, len(names)) if 'logout' in names[i])
-            flagged.append(user)
+            i_logout = next(i for i in range(i_delete + 1, len(names)) if 'logout' in names[i])
+            flagged[user] = [entries[i][1] for i in (i_login, i_delete, i_logout)]
         except (StopIteration, ValueError):
             pass
     return flagged
 
 
+def escalate_correlated_alerts():
+    """Multiple distinct alert types for one user in the window → one critical alert."""
+    window_start = timezone.now() - timedelta(minutes=ESCALATION_WINDOW_MINUTES)
+    recent = Alert.objects.filter(timestamp__gte=window_start) \
+                          .exclude(action='correlated_threat') \
+                          .select_related('user')
+    actions_by_user = defaultdict(set)
+    for alert in recent:
+        actions_by_user[alert.user].add(alert.action)
+    for user, actions in actions_by_user.items():
+        if len(actions) >= ESCALATION_DISTINCT_ALERTS:
+            _create_alert(
+                user, 'correlated_threat',
+                f"User {user.email} triggered {len(actions)} distinct detections within "
+                f"{ESCALATION_WINDOW_MINUTES} minutes: {', '.join(sorted(actions))}",
+                'critical',
+            )
+
+
 def run_all_detections():
-    for user, count in detect_failed_otp_bruteforce().items():
+    for user, log_ids in detect_failed_otp_bruteforce().items():
         _create_alert(
             user, 'otp_failed',
-            f"More than 5 failed OTP attempts in the last 15 minutes ({count})",
-            'high',
+            f"More than 5 failed OTP attempts in the last 15 minutes ({len(log_ids)})",
+            'high', log_ids,
         )
 
-    for user, count in detect_rapid_logins().items():
+    for user, log_ids in detect_rapid_logins().items():
         _create_alert(
             user, 'rapid_login',
-            f"User {user.email} logged in {count} times in a short period",
-            'medium',
+            f"User {user.email} logged in {len(log_ids)} times in a short period",
+            'medium', log_ids,
         )
 
-    for user in detect_unusual_hours_login():
+    for user, log_ids in detect_unusual_hours_login().items():
         _create_alert(
             user, 'unusual_login_hour',
             f"User {user.email} logged in during unusual hours (00:00-06:00)",
-            'medium',
+            'medium', log_ids,
         )
 
-    for user, count in detect_excessive_downloads().items():
+    for user, log_ids in detect_excessive_downloads().items():
         _create_alert(
             user, 'excessive_downloads',
-            f"User {user.email} downloaded {count} files in a short period",
-            'high',
+            f"User {user.email} downloaded {len(log_ids)} files in a short period",
+            'high', log_ids,
         )
 
-    for log in detect_unauthorized_access():
+    for user, log_ids in detect_unauthorized_access().items():
         _create_alert(
-            log.actor, 'unauthorized_access',
-            f"User {log.actor.email} attempted to access a resource outside their allowed scope",
-            'high',
+            user, 'unauthorized_access',
+            f"User {user.email} attempted to access resources outside their allowed scope",
+            'high', log_ids,
         )
 
-    for user in detect_suspicious_sequences():
+    for user, log_ids in detect_suspicious_sequences().items():
         _create_alert(
             user, 'suspicious_sequence',
             f"User {user.email} performed login → delete → logout in quick succession",
-            'high',
+            'high', log_ids,
         )
+
+    escalate_correlated_alerts()

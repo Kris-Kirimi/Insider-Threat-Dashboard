@@ -1,86 +1,53 @@
 'use client';
 
 import React from 'react';
-import { Box, Typography, Button, useTheme } from '@mui/material';
+import { Box, Typography, Button } from '@mui/material';
+import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
+import { useRouter } from 'next/navigation';
+import Reveal from '@/app/components/Reveal';
+import { tokens } from '@/lib/theme';
 
-const CTASection = () => {
-  const theme = useTheme();
-
+export default function CTASection() {
+  const router = useRouter();
   return (
-    <Box
-      sx={{
-        background: 'linear-gradient(135deg, #1e1e1e 0%, #0f2027 100%)',
-        py: 6,
-        px: { xs: 2, md: 4 },
-        color: '#fff',
-        textAlign: 'center',
-        position: 'relative',
-        overflow: 'hidden',
-        '&::after': {
-          content: '""',
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          width: '100%',
-          height: '50%',
-          background: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 1440 320\'%3E%3Cpath fill=\'%230f2027\' fill-opacity=\'0.8\' d=\'M0,128L48,144C96,160,192,192,288,192C384,192,480,160,576,149.3C672,139,768,149,864,149.3C960,149,1056,139,1152,133.3C1248,128,1344,128,1392,128L1440,128V320H1392C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320H0Z\'/%3E%3C/svg%3E")',
-          backgroundSize: 'cover',
-          zIndex: 0,
-        },
-      }}
-    >
-      <Typography
-        variant="h3"
-        sx={{
-          fontWeight: 800,
-          mb: 2,
-          fontSize: { xs: '2rem', md: '2.5rem' },
-          letterSpacing: '0.1rem',
-          textShadow: '0 2px 4px rgba(0, 0, 0, 0.5)',
-          position: 'relative',
-          zIndex: 1,
-        }}
-      >
-        Protect Your Organization Now
-      </Typography>
-      <Typography
-        variant="h6"
-        sx={{
-          mb: 4,
-          maxWidth: '600px',
-          mx: 'auto',
-          color: '#d3d3d3',
-          fontSize: { xs: '1rem', md: '1.1rem' },
-          lineHeight: 1.6,
-          position: 'relative',
-          zIndex: 1,
-        }}
-      >
-        Take the first step to safeguard your data with our insider threat monitoring solution.
-      </Typography>
-      <Button
-        variant="contained"
-        href="/signup"
-        sx={{
-          px: 5,
-          py: 2,
-          fontWeight: 'bold',
-          fontSize: '1.1rem',
-          background: 'linear-gradient(45deg, #00bcd4 0%, #00aaff 100%)',
-          color: '#fff',
-          textTransform: 'none',
-          '&:hover': {
-            background: 'linear-gradient(45deg, #00aaff 0%, #00bcd4 100%)',
-            boxShadow: '0 4px 12px rgba(0, 188, 212, 0.4)',
-          },
-          position: 'relative',
-          zIndex: 1,
-        }}
-      >
-        Start Your Free Trial
-      </Button>
+    <Box sx={{ px: { xs: 3, md: 8 }, py: { xs: 8, md: 14 }, maxWidth: 1200, mx: 'auto' }}>
+      <Reveal>
+        <Box
+          sx={{
+            position: 'relative',
+            borderRadius: `${tokens.radius + 8}px`,
+            border: `1px solid ${tokens.hairline}`,
+            overflow: 'hidden',
+            px: { xs: 4, md: 10 },
+            py: { xs: 8, md: 12 },
+            textAlign: 'center',
+            background:
+              `radial-gradient(700px 340px at 50% -30%, ${tokens.accentDim}, transparent 70%), ${tokens.bgElevated}`,
+          }}
+        >
+          <Typography variant="h2" sx={{ fontSize: { xs: '2rem', md: '3rem' }, maxWidth: 640, mx: 'auto' }}>
+            Protect your organization from the inside out.
+          </Typography>
+          <Typography sx={{ mt: 2.5, color: tokens.textDim, maxWidth: 520, mx: 'auto', fontSize: '1.05rem', lineHeight: 1.7 }}>
+            Sign in to the console and start monitoring authenticated behaviour, scoring risk and
+            triaging alerts in real time.
+          </Typography>
+          <Button
+            onClick={() => router.push('/login')}
+            endIcon={
+              <Box sx={{ width: 26, height: 26, borderRadius: '50%', display: 'grid', placeItems: 'center', background: 'rgba(5,7,13,0.18)' }}>
+                <ArrowForwardRoundedIcon sx={{ fontSize: 16 }} />
+              </Box>
+            }
+            sx={{
+              mt: 5, background: tokens.accentBright, color: '#05070d', fontWeight: 700, pl: 3, pr: 1, py: 1.4,
+              '&:hover': { background: tokens.accent, transform: 'translateY(-1px)' },
+            }}
+          >
+            Get started
+          </Button>
+        </Box>
+      </Reveal>
     </Box>
   );
-};
-
-export default CTASection;
+}

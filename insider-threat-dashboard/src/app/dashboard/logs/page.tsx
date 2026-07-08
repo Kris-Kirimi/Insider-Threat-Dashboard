@@ -41,54 +41,19 @@ import {
   YAxis,
   CartesianGrid,
 } from 'recharts';
-import TopNavBar from '@/app/components/TopNavBar';
+import AuthedTopBar from '@/app/components/AuthedTopBar';
 import Sidebar from '../components/SideBar';
 import { createAlertsSocket } from '@/lib/alertsSockets';
 import useSWR from 'swr';
-import { apiGetWithAuth } from '@/lib/api'; 
+import { apiGetWithAuth } from '@/lib/api';
+import { appTheme, appBackground } from '@/lib/theme';
 
 const API_BASE =
   typeof window !== 'undefined'
     ? process.env.NEXT_PUBLIC_API_BASE || 'http://127.0.0.1:8000'
     : '';
 
-const theme = createTheme({
-  palette: {
-    mode: 'dark',
-    primary: { main: '#00bcd4' }, // Cyan for primary
-    secondary: { main: '#f44336' }, // Red for secondary
-    background: { default: '#0a101f', paper: 'rgba(31, 44, 62, 0.9)' },
-    text: { primary: '#ffffff', secondary: '#bbbbbb' },
-  },
-  typography: { fontFamily: '"Roboto","Arial",sans-serif' },
-  components: {
-    MuiCard: {
-      styleOverrides: {
-        root: {
-          borderRadius: 12,
-          backdropFilter: 'blur(10px)',
-          border: '1px solid rgba(0, 188, 212, 0.2)',
-        },
-      },
-    },
-    MuiTable: {
-      styleOverrides: {
-        root: {
-          background: 'rgba(31, 44, 62, 0.9)',
-        },
-      },
-    },
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          borderRadius: 8,
-          textTransform: 'none',
-          fontWeight: 500,
-        },
-      },
-    },
-  },
-});
+const theme = appTheme;
 
 interface AuditLog {
   user: string;
@@ -106,30 +71,12 @@ interface AlertItem {
   timestamp: string;
 }
 
-// FooterSection component (replace with your actual FooterSection if different)
 function FooterSection() {
   return (
-    <Box
-      component="footer"
-      sx={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        width: '100%',
-        background: 'rgba(15, 32, 39, 0.95)',
-        backdropFilter: 'blur(8px)',
-        color: '#fff',
-        py: 2,
-        textAlign: 'center',
-        zIndex: 1200,
-        borderTop: '1px solid rgba(0, 188, 212, 0.2)',
-      }}
-    >
-      <Container>
-        <Typography variant="body2" sx={{ color: '#bbb', fontSize: { xs: '0.9rem', sm: '1rem' } }}>
-          © {new Date().getFullYear()} Insider Threat Dashboard. All rights reserved.
-        </Typography>
-      </Container>
+    <Box component="footer" sx={{ mt: 6, py: 3, textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+      <Typography variant="body2" sx={{ color: '#5b6b7b', fontSize: 13 }}>
+        © {new Date().getFullYear()} InsiderDash — Insider Threat Monitoring
+      </Typography>
     </Box>
   );
 }
@@ -291,41 +238,22 @@ export default function InsiderThreatDashboard() {
     <ThemeProvider theme={theme}>
       <Box
         sx={{
-          minHeight: '100vh',
-          background: 'linear-gradient(135deg, #0a101f 0%, #1f2c3e 100%)',
+          minHeight: '100dvh',
+          background: appBackground,
           display: 'flex',
           flexDirection: 'column',
-          position: 'relative',
-          overflow: 'hidden',
-          '&::before': {
-            content: '""',
-            position: 'absolute',
-            top: '-20%',
-            left: '-20%',
-            width: '140%',
-            height: '140%',
-            background: 'radial-gradient(circle, rgba(0, 188, 212, 0.15) 0%, transparent 70%)',
-            animation: 'pulse 15s ease-in-out infinite',
-            zIndex: 0,
-            '@keyframes pulse': {
-              '0%': { transform: 'scale(1)', opacity: 0.15 },
-              '50%': { transform: 'scale(1.2)', opacity: 0.25 },
-              '100%': { transform: 'scale(1)', opacity: 0.15 },
-            },
-          },
-          pb: { xs: 8, sm: 6 }, // Prevent content overlap with fixed footer
         }}
       >
-        <TopNavBar />
+        <AuthedTopBar />
         <Box sx={{ display: 'flex', flex: 1 }}>
           <Sidebar />
           <Container
+            maxWidth={false}
             sx={{
               flex: 1,
-              p: { xs: 2, sm: 3 },
+              p: { xs: 2, sm: 4 },
               ml: { xs: 0, md: '240px' },
-              position: 'relative',
-              zIndex: 1,
+              maxWidth: 1280,
             }}
           >
             <Typography

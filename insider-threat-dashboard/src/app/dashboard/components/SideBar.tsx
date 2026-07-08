@@ -1,163 +1,86 @@
-
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import {
-  Box,
-  List,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Typography,
-  useTheme,
-} from '@mui/material';
-import {
-  Dashboard as DashboardIcon,
-  People as PeopleIcon,
-  Warning as WarningIcon,
-  Settings as SettingsIcon,
-} from '@mui/icons-material';
+import React from 'react';
+import { Box, List, ListItemButton, ListItemIcon, ListItemText, Typography } from '@mui/material';
+import SpaceDashboardRoundedIcon from '@mui/icons-material/SpaceDashboardRounded';
+import GroupRoundedIcon from '@mui/icons-material/GroupRounded';
+import PolicyRoundedIcon from '@mui/icons-material/PolicyRounded';
+import ReceiptLongRoundedIcon from '@mui/icons-material/ReceiptLongRounded';
+import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import { useRouter, usePathname } from 'next/navigation';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { tokens } from '@/lib/theme';
 
-interface MenuItem {
-  text: string;
-  path: string;
-  icon: React.ReactElement;
-}
+const menuItems = [
+  { text: 'Overview', path: '/dashboard', icon: <SpaceDashboardRoundedIcon /> },
+  { text: 'Users', path: '/dashboard/users', icon: <GroupRoundedIcon /> },
+  { text: 'Rule Engine', path: '/dashboard/ruleengine', icon: <PolicyRoundedIcon /> },
+  { text: 'Threat Logs', path: '/dashboard/logs', icon: <ReceiptLongRoundedIcon /> },
+  { text: 'Settings', path: '/dashboard/settings', icon: <SettingsRoundedIcon /> },
+];
 
 const Sidebar: React.FC = () => {
   const router = useRouter();
   const pathname = usePathname();
-  const [darkMode, setDarkMode] = useState<boolean>(false);
-
-  // Load dark mode preference from localStorage
-  useEffect(() => {
-    const savedMode = localStorage.getItem('darkMode') === 'true';
-    setDarkMode(savedMode);
-  }, []);
-
-  // Update dark mode in localStorage
-  useEffect(() => {
-    localStorage.setItem('darkMode', darkMode.toString());
-  }, [darkMode]);
-
-  // Define custom theme to match EmployeeSettingsPage
-  const theme = createTheme({
-    palette: {
-      mode: darkMode ? 'dark' : 'light',
-      primary: {
-        main: '#00bcd4',
-      },
-      background: {
-        default: darkMode ? '#0f2027' : '#f4f6f8',
-        paper: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.95)',
-      },
-      text: {
-        primary: darkMode ? '#ffffff' : '#333333',
-        secondary: darkMode ? '#cccccc' : '#666666',
-      },
-    },
-    typography: {
-      fontFamily: '"Inter", "Roboto", sans-serif',
-      h6: {
-        fontWeight: 700,
-        color: darkMode ? '#00bcd4' : '#1976d2',
-      },
-     
-    },
-    components: {
-      MuiListItemButton: {
-        styleOverrides: {
-          root: {
-            borderRadius: '8px',
-            padding: '8px 12px',
-            margin: '4px 0',
-            '&:hover': {
-              background: darkMode
-                ? 'rgba(0, 188, 212, 0.2)'
-                : 'rgba(25, 118, 210, 0.1)',
-            },
-            '&.Mui-selected': {
-              background: darkMode
-                ? 'rgba(0, 188, 212, 0.3)'
-                : 'rgba(25, 118, 210, 0.2)',
-              
-              '& .MuiListItemText-primary': {
-                fontWeight: 600,
-              },
-              '& .MuiListItemIcon-root': {
-                color: darkMode ? '#ffffff' : '#1976d2',
-              },
-            },
-          },
-        },
-      },
-      MuiListItemText: {
-        styleOverrides: {
-          primary: {
-            fontSize: '0.9rem',
-            color: darkMode ? '#ffffff' : '#333333',
-          },
-        },
-      },
-      MuiListItemIcon: {
-        styleOverrides: {
-          root: {
-            minWidth: '36px',
-            color: darkMode ? '#cccccc' : '#666666',
-          },
-        },
-      },
-    },
-  });
-
-  const menuItems: MenuItem[] = [
-    { text: 'Overview', path: '/dashboard', icon: <DashboardIcon /> },
-    { text: 'Users', path: '/dashboard/users', icon: <PeopleIcon /> },
-    { text: 'Rule Engine', path: '/dashboard/ruleengine', icon: <PeopleIcon /> },
-    { text: 'Threat Logs', path: '/dashboard/logs', icon: <WarningIcon /> },
-    { text: 'Settings', path: '/dashboard/settings', icon: <SettingsIcon /> },
-  ];
 
   return (
-    <ThemeProvider theme={theme}>
-      <Box
-        sx={{
-          width: { xs: 200, sm: 240 },
-          height: '100vh',
-          position: 'fixed',
-          top: 56, // Align below fixed TopNavBar
-          left: 0,
-          background: darkMode
-            ? 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))'
-            : 'linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.9))',
-          backdropFilter: 'blur(12px)',
-          borderRight: `1px solid ${darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
-          px: { xs: 1.5, sm: 2 },
-          py: 2,
-          zIndex: 1000,
-          overflowY: 'auto',
-        }}
+    <Box
+      component="nav"
+      sx={{
+        width: { xs: 0, md: 240 },
+        display: { xs: 'none', md: 'block' },
+        flexShrink: 0,
+        height: 'calc(100dvh - 65px)',
+        position: 'fixed',
+        top: 65,
+        left: 0,
+        background: 'rgba(8,11,18,0.6)',
+        backdropFilter: 'blur(16px)',
+        borderRight: `1px solid ${tokens.hairline}`,
+        px: 1.5,
+        py: 3,
+        zIndex: 1000,
+        overflowY: 'auto',
+      }}
+    >
+      <Typography
+        sx={{ px: 2, mb: 1.5, fontSize: 10, letterSpacing: '0.22em', color: tokens.textFaint, fontWeight: 700 }}
       >
-        
-        <List>
-          {menuItems.map((item) => (
+        CONSOLE
+      </Typography>
+      <List sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+        {menuItems.map((item) => {
+          const active = pathname === item.path;
+          return (
             <ListItemButton
               key={item.text}
               onClick={() => router.push(item.path)}
-              selected={pathname === item.path}
               sx={{
-                mx: 1,
+                borderRadius: '12px',
+                py: 1.1,
+                position: 'relative',
+                color: active ? tokens.text : tokens.textDim,
+                background: active ? tokens.accentDim : 'transparent',
+                border: `1px solid ${active ? `${tokens.accent}33` : 'transparent'}`,
+                transition: 'all 180ms cubic-bezier(0.32,0.72,0,1)',
+                '&:hover': { background: active ? tokens.accentDim : 'rgba(255,255,255,0.04)', color: tokens.text },
+                '&::before': active
+                  ? {
+                      content: '""', position: 'absolute', left: 0, top: '50%',
+                      transform: 'translateY(-50%)', width: 3, height: 18,
+                      borderRadius: 4, background: tokens.accent,
+                    }
+                  : {},
               }}
             >
-              <ListItemIcon>{item.icon}</ListItemIcon>
-              <ListItemText primary={item.text} />
+              <ListItemIcon sx={{ minWidth: 36, color: active ? tokens.accent : tokens.textFaint }}>
+                {item.icon}
+              </ListItemIcon>
+              <ListItemText primary={item.text} primaryTypographyProps={{ fontSize: 14, fontWeight: active ? 600 : 500 }} />
             </ListItemButton>
-          ))}
-        </List>
-      </Box>
-    </ThemeProvider>
+          );
+        })}
+      </List>
+    </Box>
   );
 };
 

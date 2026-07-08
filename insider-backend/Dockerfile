@@ -6,16 +6,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# system deps
-# Install system build deps required by many Python C-extensions (mysqlclient, cryptography, pillow, lxml, etc.)
+# system deps for psycopg2 / cryptography / pillow (PostgreSQL stack)
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
      build-essential \
      gcc \
      pkg-config \
-     default-libmysqlclient-dev \
-     libmariadb-dev-compat \
-     libmariadb-dev \
      libpq-dev \
      libffi-dev \
      libssl-dev \
@@ -35,9 +31,11 @@ RUN pip install --upgrade pip setuptools wheel \
 # copy project
 COPY . /insider-backend/
 
-# make entrypoint executable
+# make entrypoint executable; strip any CR so the shebang execs on Linux even
+# if the file was checked out with Windows (CRLF) line endings.
 COPY entrypoint.sh /insider-backend/entrypoint.sh
-RUN chmod +x /insider-backend/entrypoint.sh
+RUN sed -i 's/\r$//' /insider-backend/entrypoint.sh \
+  && chmod +x /insider-backend/entrypoint.sh
 
 # switch to non-root user (optional but recommended)
 USER insiderAdmin

@@ -1,152 +1,67 @@
 'use client';
 
 import React from 'react';
-import { Box, Typography, Paper, useTheme } from '@mui/material';
-import ShieldIcon from '@mui/icons-material/Security';
-import AnalyticsIcon from '@mui/icons-material/Analytics';
-import VisibilityIcon from '@mui/icons-material/Visibility';
+import { Box, Typography } from '@mui/material';
+import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
+import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import Reveal from '@/app/components/Reveal';
+import { tokens, bezelShell, bezelCore } from '@/lib/theme';
 
-const AboutSection = () => {
-  const theme = useTheme();
+const cards = [
+  {
+    icon: <ShieldOutlinedIcon />,
+    title: 'Secure by design',
+    body: 'Built security-first on Django REST and Next.js, with JWT + OTP authentication and role-based access on every resource.',
+  },
+  {
+    icon: <InsightsRoundedIcon />,
+    title: 'Real-time analytics',
+    body: 'Behavioural detections and risk scores update live over WebSockets, so suspicious activity surfaces the moment it happens.',
+  },
+  {
+    icon: <VisibilityOutlinedIcon />,
+    title: 'Intelligent monitoring',
+    body: 'Rule-based detectors and an Isolation Forest model watch authenticated users and flag anomalies before they escalate.',
+  },
+];
 
+export default function AboutSection() {
   return (
-    <Box
-      sx={{
-        background: 'linear-gradient(135deg, #0f2027 0%, #203A43 100%)',
-        py: 6,
-        px: { xs: 2, md: 4 },
-        color: '#fff',
-        minHeight: '70vh',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-      }}
-      id="about"
-    >
-      <Typography
-        variant="h4"
-        sx={{
-          textAlign: 'center',
-          fontWeight: 700,
-          mb: 4,
-          fontSize: { xs: '2rem', md: '2.5rem' },
-          letterSpacing: '0.1rem',
-          textShadow: '0 2px 4px rgba(0, 0, 0, 0.3)',
-        }}
-      >
-        About InsiderDash
-      </Typography>
+    <Box id="about" sx={{ py: { xs: 12, md: 20 }, px: { xs: 3, md: 8 }, maxWidth: 1200, mx: 'auto' }}>
+      <Reveal>
+        <Typography sx={{ color: tokens.accent, textTransform: 'uppercase', letterSpacing: '0.22em', fontSize: 12, fontWeight: 600, mb: 2 }}>
+          What it does
+        </Typography>
+        <Typography variant="h2" sx={{ fontSize: { xs: '2rem', md: '3rem' }, maxWidth: 720 }}>
+          Threats from inside are the ones firewalls miss.
+        </Typography>
+        <Typography sx={{ mt: 2.5, color: tokens.textDim, maxWidth: 640, fontSize: '1.05rem', lineHeight: 1.7 }}>
+          Insiders already hold valid credentials, so conventional perimeter defences never see them.
+          InsiderDash provides continuous behavioural monitoring of everyone who is already logged in.
+        </Typography>
+      </Reveal>
 
-      <Typography
-        variant="body1"
-        sx={{
-          textAlign: 'center',
-          maxWidth: '900px',
-          mx: 'auto',
-          mb: 6,
-          color: '#d3d3d3',
-          fontSize: { xs: '1rem', md: '1.1rem' },
-          lineHeight: 1.6,
-          padding: { xs: 1, md: 0 },
-        }}
-      >
-        InsiderDash is a cutting-edge dashboard designed to help organizations identify, monitor, and mitigate insider threats. Our tool delivers real-time insights and visualizations, enhancing the detection of suspicious activity within a secure, user-friendly interface.
-      </Typography>
-
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
-          gap: 4,
-          justifyItems: 'center',
-          maxWidth: '1200px',
-          mx: 'auto',
-          padding: { xs: 2, md: 0 },
-        }}
-      >
-        <Paper
-          elevation={8}
-          sx={{
-            backgroundColor: 'rgba(255, 255, 255, 0.1)',
-            backdropFilter: 'blur(10px)',
-            p: 3,
-            textAlign: 'center',
-            color: '#fff',
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              transform: 'translateY(-5px)',
-              backgroundColor: 'rgba(255, 255, 255, 0.15)',
-              boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
-            },
-            maxWidth: '100%',
-            width: '300px',
-          }}
-        >
-          <ShieldIcon sx={{ fontSize: 60, color: '#00bcd4', mb: 2 }} />
-          <Typography variant="h6" fontWeight="bold" sx={{ mb: 1 }}>
-            Secure Architecture
-          </Typography>
-          <Typography variant="body2" color="#bbb" sx={{ lineHeight: 1.5 }}>
-            Built with security-first principles using modern frameworks like Django and Next.js.
-          </Typography>
-        </Paper>
-
-        <Paper
-          elevation={8}
-          sx={{
-            backgroundColor: 'rgba(255, 255, 255, 0.1)',
-            backdropFilter: 'blur(10px)',
-            p: 3,
-            textAlign: 'center',
-            color: '#fff',
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              transform: 'translateY(-5px)',
-              backgroundColor: 'rgba(255, 255, 255, 0.15)',
-              boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
-            },
-            maxWidth: '100%',
-            width: '300px',
-          }}
-        >
-          <AnalyticsIcon sx={{ fontSize: 60, color: '#00bcd4', mb: 2 }} />
-          <Typography variant="h6" fontWeight="bold" sx={{ mb: 1 }}>
-            Real-Time Analytics
-          </Typography>
-          <Typography variant="body2" color="#bbb" sx={{ lineHeight: 1.5 }}>
-            Visualize user activities and threats in real time through interactive dashboards.
-          </Typography>
-        </Paper>
-
-        <Paper
-          elevation={8}
-          sx={{
-            backgroundColor: 'rgba(255, 255, 255, 0.1)',
-            backdropFilter: 'blur(10px)',
-            p: 3,
-            textAlign: 'center',
-            color: '#fff',
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              transform: 'translateY(-5px)',
-              backgroundColor: 'rgba(255, 255, 255, 0.15)',
-              boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
-            },
-            maxWidth: '100%',
-            width: '300px',
-          }}
-        >
-          <VisibilityIcon sx={{ fontSize: 60, color: '#00bcd4', mb: 2 }} />
-          <Typography variant="h6" fontWeight="bold" sx={{ mb: 1 }}>
-            Intelligent Monitoring
-          </Typography>
-          <Typography variant="body2" color="#bbb" sx={{ lineHeight: 1.5 }}>
-            AI-powered surveillance to proactively detect insider threats before they escalate.
-          </Typography>
-        </Paper>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2, mt: 6 }}>
+        {cards.map((c, i) => (
+          <Reveal key={c.title} delay={i * 90}>
+            <Box sx={{ ...bezelShell, height: '100%' }}>
+              <Box sx={{ ...bezelCore, p: 4, height: '100%' }}>
+                <Box
+                  sx={{
+                    width: 46, height: 46, borderRadius: '13px', display: 'grid', placeItems: 'center',
+                    background: tokens.accentDim, border: `1px solid ${tokens.accent}33`, color: tokens.accent, mb: 2.5,
+                  }}
+                >
+                  {c.icon}
+                </Box>
+                <Typography variant="h6" sx={{ mb: 1 }}>{c.title}</Typography>
+                <Typography sx={{ color: tokens.textDim, lineHeight: 1.65, fontSize: 14.5 }}>{c.body}</Typography>
+              </Box>
+            </Box>
+          </Reveal>
+        ))}
       </Box>
     </Box>
   );
-};
-
-export default AboutSection;
+}

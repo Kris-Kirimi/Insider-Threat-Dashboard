@@ -1,4 +1,18 @@
-version: "3.9"
+# Local orchestration: web + Redis + Celery worker/beat + Flower.
+# Secrets come from insider-backend/.env (never baked into the image).
+
+x-backend: &backend
+  build: .
+  env_file:
+    - .env
+  environment:
+    - REDIS_URL=redis://redis:6379/0
+    - CELERY_BROKER_URL=redis://redis:6379/0
+    - CELERY_RESULT_BACKEND=redis://redis:6379/1
+  volumes:
+    - ./:/insider-backend
+  depends_on:
+    - redis
 
 services:
   redis:
@@ -9,53 +23,33 @@ services:
       - redis-data:/data
 
   web:
-    build: .
+    <<: *backend
     command: python manage.py runserver 0.0.0.0:8000
-    volumes:
-      - ./:/app
     ports:
       - "8000:8000"
-    environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
-    depends_on:
-      - redis
 
   celery:
-    build: .
-    command: >
-      celery -A insiderbackend worker --loglevel=info
-    volumes:
-      - ./:/app
+    <<: *backend
+    command: celery -A insiderbackend worker --loglevel=info
     depends_on:
       - redis
       - web
-    environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
 
   celery-beat:
-    build: .
+    <<: *backend
     command: celery -A insiderbackend beat --loglevel=info
-    volumes:
-      - ./:/app
     depends_on:
       - redis
       - web
-    environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+
   flower:
-    build: .
-    command: celery -A insiderbackend flower --port=5555 --broker=redis://redis:6379/0
+    <<: *backend
+    command: celery -A insiderbackend flower --port=5555
     ports:
       - "5555:5555"
     depends_on:
       - redis
       - web
-    environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/1
 
 volumes:
   redis-data:

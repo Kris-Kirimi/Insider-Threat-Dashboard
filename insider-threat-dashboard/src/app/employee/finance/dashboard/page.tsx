@@ -1,16 +1,17 @@
 'use client';
 
 import React from 'react';
-import FinanceDirectorDashboard from './components/FinanceFilesPage';
-import ITDepartmentSharedFiles from '../../it/dashboard/components/ITFilesPage';
+import DepartmentFilesPage from '@/app/components/DepartmentFilesPage';
 
-const Page = () => {
+// Finance department id in the seeded database.
+const FINANCE_DEPT_ID = 1;
+
+export default function FinanceDashboardPage() {
   return (
-     <>
-    <FinanceDirectorDashboard />
-    <ITDepartmentSharedFiles/>
-</>
- );
-};
-
-export default Page;
+    <DepartmentFilesPage
+      departmentName="Finance Department"
+      departmentId={FINANCE_DEPT_ID}
+      accent="#00bcd4"
+    />
+  );
+}

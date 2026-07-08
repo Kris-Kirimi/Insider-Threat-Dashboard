@@ -9,6 +9,15 @@ class Alert(models.Model):
         ('low', 'Low'),
         ('medium', 'Medium'),
         ('high', 'High'),
+        ('critical', 'Critical'),
+    ]
+
+    STATUS_CHOICES = [
+        ('new', 'New'),
+        ('acknowledged', 'Acknowledged'),
+        ('investigating', 'Investigating'),
+        ('resolved', 'Resolved'),
+        ('false_positive', 'False positive'),
     ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -16,7 +25,10 @@ class Alert(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     description = models.TextField()
     severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, default='medium')
-    cleared = models.BooleanField(default=False)  # Add this!
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='new')
+    # IDs of the AuditLog rows that triggered this alert (investigation evidence)
+    related_logs = models.JSONField(default=list, blank=True)
+    cleared = models.BooleanField(default=False)  # legacy flag, kept in sync with status
 
     def __str__(self):
         return f"{self.timestamp}: {self.user.email} - {self.action} ({self.severity})"

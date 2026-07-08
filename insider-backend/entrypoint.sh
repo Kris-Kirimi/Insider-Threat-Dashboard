@@ -41,3 +41,4 @@ else
   echo "No command provided - starting gunicorn"
   exec gunicorn insiderbackend.wsgi:application --bind 0.0.0.0:8000 --workers 3
 fi
+

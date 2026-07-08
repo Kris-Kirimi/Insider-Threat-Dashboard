@@ -77,11 +77,25 @@ activity.
    | Unauthorized access  | Permission layer denied a resource action   | High     |
    | Suspicious sequence  | login → delete → logout within 10 min       | High     |
 
+   When one user trips three or more distinct detections within an hour, the
+   engine raises a single **critical** correlated-threat alert instead of
+   several isolated ones.
 4. **ML anomaly detection** — an Isolation Forest trained on per-user activity
    features (login/download/delete/failure counts) scores recent behaviour;
-   anomalies raise alerts alongside the rule-based ones.
-5. **Dashboard** — administrators see active alerts, alert history, audit
-   logs, user activity and severity distribution in the Next.js dashboard.
+   anomalies raise alerts alongside the rule-based ones (deduplicated and
+   retrained weekly).
+5. **Risk scoring** — each user gets a rolling 30-day, time-decayed risk score
+   weighted by alert severity, surfaced as the dashboard's "highest-risk users"
+   panel (`/api/monitoring/risk-scores/`).
+6. **Alert triage** — every alert carries a status
+   (new → acknowledged → investigating → resolved / false positive) and links
+   to the audit-log rows that triggered it, so an admin can click through to the
+   evidence during an investigation.
+7. **Dashboard** — administrators see active alerts with triage controls,
+   evidence, audit logs, risk scores and severity distribution in the Next.js
+   dashboard, updated in real time over WebSockets.
+8. **Retention** — a nightly task prunes audit logs older than 90 days, stale
+   anomalies and long-closed alerts so the tables stay bounded.
 
 ## Project layout
 

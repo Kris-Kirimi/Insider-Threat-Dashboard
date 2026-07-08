@@ -6,6 +6,7 @@ variables (loaded from insider-backend/.env, which is NOT committed).
 See .env.example for the expected variables.
 """
 import os
+import sys
 from datetime import timedelta
 from pathlib import Path
 
@@ -32,7 +33,16 @@ ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.
 # Database: DATABASE_URL if provided, otherwise local SQLite for development
 # ---------------------------------------------------------------------------
 DATABASE_URL = os.getenv('DATABASE_URL')
-if DATABASE_URL:
+TESTING = 'test' in sys.argv
+if TESTING:
+    # Tests always run on a local in-memory SQLite DB, never the real database.
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': ':memory:',
+        }
+    }
+elif DATABASE_URL:
     DATABASES = {
         'default': dj_database_url.parse(
             DATABASE_URL,
@@ -199,10 +209,20 @@ CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', REDIS_URL)
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 
+from celery.schedules import crontab  # noqa: E402
+
 CELERY_BEAT_SCHEDULE = {
     'run-detections-every-minute': {
         'task': 'monitoring.run_all_detections',
         'schedule': 60.0,
+    },
+    'retrain-ml-model-weekly': {
+        'task': 'monitoring.train_ml_model',
+        'schedule': crontab(day_of_week='sun', hour=2, minute=0),
+    },
+    'cleanup-old-data-nightly': {
+        'task': 'monitoring.cleanup_old_data',
+        'schedule': crontab(hour=3, minute=0),
     },
 }
 

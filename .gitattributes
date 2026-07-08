@@ -1,0 +1,11 @@
+# Keep shell scripts and Docker entrypoints LF so Linux containers can exec them
+# even when the repo is checked out on Windows.
+*.sh text eol=lf
+entrypoint.sh text eol=lf
+Dockerfile text eol=lf
+*.py text eol=lf
+
+# Default: let Git normalize text, but never touch these binary types
+*.png binary
+*.jpg binary
+*.joblib binary

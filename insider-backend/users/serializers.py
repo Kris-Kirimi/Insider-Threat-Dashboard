@@ -25,14 +25,16 @@ class RoleSerializer(serializers.ModelSerializer):
 # User Serializer
 class UserSerializer(serializers.ModelSerializer):
     department = serializers.CharField(source='department.name', default=None, read_only=True)
+    role_name = serializers.CharField(source='role.name', default=None, read_only=True)
+    is_staff = serializers.BooleanField(read_only=True)
     group = serializers.CharField(write_only=True, required=False, allow_blank=True)
     password = serializers.CharField(write_only=True, required=False)
 
     class Meta:
         model = User
         fields = [
-            'id', 'email', 'full_name', 'department', 'role',
-            'group', 'password', 'is_simulated_threat'
+            'id', 'email', 'full_name', 'department', 'role', 'role_name',
+            'is_staff', 'group', 'password', 'is_simulated_threat'
         ]
         extra_kwargs = {
             'password': {'write_only': True, 'required': False},
@@ -75,18 +77,6 @@ class UserSerializer(serializers.ModelSerializer):
 
         return instance
 
-class UpdateUserSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = [
-            "first_name",
-            "last_name",
-            "department",
-            "role",
-            "is_active",
-            "is_simulated_threat"
-        ]
-        
 # Resource Serializer
 class ResourceSerializer(serializers.ModelSerializer):
     department = serializers.CharField(source='department.name', read_only=True)

@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.models import Group
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.core.mail import send_mail
 from django.http import FileResponse, Http404, JsonResponse
 from django.utils.crypto import get_random_string
@@ -275,14 +277,27 @@ def department_resources(request):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def upload_resource(request):
-    if 'file' in request.FILES:
-        uploaded_file = request.FILES['file']
-        # TODO: Save the uploaded file properly
-        return Response(
-            {"message": f"File '{uploaded_file.name}' uploaded successfully"},
-            status=status.HTTP_201_CREATED
-        )
-    return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
+    if 'file' not in request.FILES:
+        return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
+
+    uploaded_file = request.FILES['file']
+    user = request.user
+    dept = getattr(user, 'department', None)
+    if dept is None:
+        dept, _ = Department.objects.get_or_create(name='IT')
+
+    saved_path = default_storage.save(f"resources/{uploaded_file.name}", uploaded_file)
+    resource = Resource.objects.create(
+        name=uploaded_file.name,
+        path=saved_path,
+        is_folder=False,
+        department=dept,
+        created_by=user,
+    )
+    AccessControl.objects.create(user=user, resource=resource, permission='full_control')
+    log_action(user, 'resource_upload', resource=resource, ip=request.META.get('REMOTE_ADDR'))
+    return Response(ResourceSerializer(resource, context={'request': request}).data,
+                    status=status.HTTP_201_CREATED)
 
 
 @api_view(['GET'])
@@ -306,9 +321,15 @@ def download_resource(request, pk):
     return FileResponse(open(file_path, 'rb'), as_attachment=True, filename=resource.name)
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAdminUser])
 def audit_logs(request):
-    logs = AuditLog.objects.all().order_by('-timestamp')  # fetch real logs, newest first
+    # Admin-only: the audit trail covers every user, so it must not be
+    # readable by ordinary employees. Newest first, capped for performance.
+    try:
+        limit = min(int(request.query_params.get('limit', 300)), 1000)
+    except (TypeError, ValueError):
+        limit = 300
+    logs = AuditLog.objects.select_related('actor', 'resource').order_by('-timestamp')[:limit]
     serializer = AuditLogSerializer(logs, many=True)
     return Response({"audit_logs": serializer.data})
 
@@ -358,7 +379,21 @@ class ResourceViewSet(viewsets.ModelViewSet):
             from .models import Department
             dept, _ = Department.objects.get_or_create(name='IT')
 
-        resource = serializer.save(created_by=user, department=dept)
+        extra = {'created_by': user, 'department': dept}
+
+        # Optional text content: written to MEDIA_ROOT so downloads serve
+        # real bytes instead of pointing at paths that don't exist.
+        content = self.request.data.get('content')
+        is_folder = serializer.validated_data.get('is_folder', False)
+        if content is not None and not is_folder:
+            name = serializer.validated_data.get('name', 'file')
+            safe_name = os.path.basename(name).replace(' ', '_') or 'file'
+            extra['path'] = default_storage.save(
+                f"resources/{safe_name}.txt",
+                ContentFile(content.encode('utf-8')),
+            )
+
+        resource = serializer.save(**extra)
 
         # Owner gets full control (RoleEnforcer also short-circuits on created_by)
         AccessControl.objects.create(user=user, resource=resource, permission='full_control')

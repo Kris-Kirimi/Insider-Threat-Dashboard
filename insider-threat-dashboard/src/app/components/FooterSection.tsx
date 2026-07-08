@@ -1,52 +1,38 @@
 'use client';
 
 import React from 'react';
-import { Box, Container, Divider, Typography, Link } from '@mui/material';
+import { Box, Typography, Link, Stack } from '@mui/material';
+import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
+import { tokens } from '@/lib/theme';
 
-const FooterSection = () => {
+export default function FooterSection() {
   return (
-    <Box
-      component="footer"
-      sx={{
-        backdropFilter: 'blur(15px)',
-        WebkitBackdropFilter: 'blur(15px)', 
-        background: 'rgba(255, 255, 255, 0.1)',
-        color: '#ccc',
-        textAlign: 'center',
-        py: 4,
-        px: 2,
-      }}
-    >
-        
-      <Container maxWidth="md">
-        <Typography variant="body2">
-          &copy; {new Date().getFullYear()} Insider Threat Dashboard. All rights reserved.
-        </Typography>
-
-        <Divider sx={{ my: 2, borderColor: 'rgba(255, 255, 255, 0.1)' }} />
-
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'center',
-            flexWrap: 'wrap',
-            gap: 4,
-            fontSize: '0.9rem',
-          }}
-        >
-          <Link href="#" underline="hover" color="inherit">
-            Privacy Policy
-          </Link>
-          <Link href="#" underline="hover" color="inherit">
-            Terms of Service
-          </Link>
-          <Link href="#" underline="hover" color="inherit">
-            Contact
-          </Link>
+    <Box component="footer" sx={{ borderTop: `1px solid ${tokens.hairline}`, px: { xs: 3, md: 8 }, py: 6 }}>
+      <Box
+        sx={{
+          maxWidth: 1200, mx: 'auto', display: 'flex', flexWrap: 'wrap', gap: 3,
+          alignItems: 'center', justifyContent: 'space-between',
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+          <Box sx={{ width: 28, height: 28, borderRadius: '9px', display: 'grid', placeItems: 'center', background: `linear-gradient(140deg, ${tokens.accent}, #6366f1)` }}>
+            <ShieldOutlinedIcon sx={{ fontSize: 16, color: '#05070d' }} />
+          </Box>
+          <Typography sx={{ fontWeight: 700 }}>InsiderDash</Typography>
         </Box>
-      </Container>
+
+        <Stack direction="row" spacing={3} sx={{ fontSize: 14 }}>
+          {['Privacy', 'Terms', 'Contact'].map((l) => (
+            <Link key={l} href="#" underline="none" sx={{ color: tokens.textDim, '&:hover': { color: tokens.text } }}>
+              {l}
+            </Link>
+          ))}
+        </Stack>
+
+        <Typography sx={{ color: tokens.textFaint, fontSize: 13, width: { xs: '100%', md: 'auto' } }}>
+          © {new Date().getFullYear()} InsiderDash — Insider Threat Monitoring
+        </Typography>
+      </Box>
     </Box>
   );
-};
-
-export default FooterSection;
+}

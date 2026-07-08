@@ -49,41 +49,43 @@ def infer_and_record(window_minutes=15, threshold=None):
     # convert to positive anomaly score: -score
     anomaly_scores = -scores
 
+    from monitoring.utils import _create_alert
+
     results = []
     for i, row in df.iterrows():
         user_id = int(row['actor_id'])
         score = float(anomaly_scores[i])
-        is_anom = False
         if threshold is not None:
             is_anom = score >= threshold
         else:
-            # default: pick top X% or use pipe estimator's built-in threshold
-            # we can use pipe.named_steps['iso'].predict(X[i].reshape(1,-1)) -> -1 for outlier
             pred = pipe.named_steps['iso'].predict(X[i].reshape(1, -1))[0]
             is_anom = pred == -1
 
-        # Create Anomaly row
-        user_obj = None
+        results.append({'user_id': user_id, 'score': score, 'is_anomaly': is_anom})
+
+        # Only persist actual anomalies: this runs every minute, so recording
+        # every user every window would flood the table with normal behaviour.
+        if not is_anom:
+            continue
+
         try:
             user_obj = User.objects.get(pk=user_id)
         except User.DoesNotExist:
-            pass
+            continue
 
-        an = Anomaly.objects.create(
+        Anomaly.objects.create(
             actor=user_obj,
             score=score,
-            is_anomaly=is_anom,
+            is_anomaly=True,
             reason='isolation_forest_window',
             related_logs=[],
         )
 
-        # If anomalous → create Alert
-        if is_anom:
-            Alert.objects.create(
-                user=user_obj,
-                action='ml_anomaly',
-                description=f"ML anomaly score {score:.4f} in last {window_minutes}m",
-                severity='high' if score > 1.0 else 'medium'
-            )
-        results.append({'user_id': user_id, 'score': score, 'is_anomaly': is_anom})
+        # Deduplicated alongside the rule-based alerts, so one anomalous user
+        # does not raise a new alert every minute.
+        _create_alert(
+            user_obj, 'ml_anomaly',
+            f"ML anomaly score {score:.4f} in last {window_minutes}m",
+            'high' if score > 1.0 else 'medium',
+        )
     return results

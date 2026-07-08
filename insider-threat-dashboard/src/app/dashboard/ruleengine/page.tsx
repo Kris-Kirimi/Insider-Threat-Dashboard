@@ -30,12 +30,15 @@ import {
   Tooltip,
   Snackbar,
   Alert,
+  ThemeProvider,
+  CssBaseline,
 } from '@mui/material';
 import { Edit, Delete, Add } from '@mui/icons-material';
-import TopNavBar from '@/app/components/TopNavBar';
+import AuthedTopBar from '@/app/components/AuthedTopBar';
 import Sidebar from '../components/SideBar';
 import FooterSection from '@/app/components/FooterSection';
 import { apiGet, apiPost, apiPatch, apiDelete } from '@/lib/api';
+import { appTheme, appBackground } from '@/lib/theme';
 
 // ===== Types & constants =====
 type AccessLevel = 'none' | 'read' | 'write' | 'download';
@@ -80,7 +83,7 @@ function summarizeAccess(perms: Record<string, AccessLevel>): string {
 
 // ===== Page component =====
 // Add this at the top
-export function suggestPath(name: string, isFolder: boolean): string {
+function suggestPath(name: string, isFolder: boolean): string {
   const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
   return isFolder ? `/folders/${slug}/` : `/files/${slug}.dat`;
 }
@@ -180,7 +183,7 @@ export default function AccessControlPage() {
 
   // Parse backend error messages
   function parseApiError(e: any) {
-    let msg = e?.message ?? String(e) ?? 'Unknown error';
+    const msg = e?.message ?? String(e) ?? 'Unknown error';
     try {
       const parsed = JSON.parse(msg);
       if (typeof parsed === 'object') {
@@ -261,11 +264,13 @@ export default function AccessControlPage() {
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <TopNavBar />
-      <Box sx={{ display: 'flex', flex: 1 }}>
-        <Sidebar />
-        <Box sx={{ flex: 1, p: 3, ml: '240px' }}>
+    <ThemeProvider theme={appTheme}>
+      <CssBaseline />
+      <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh', background: appBackground }}>
+        <AuthedTopBar />
+        <Box sx={{ display: 'flex', flex: 1 }}>
+          <Sidebar />
+          <Box sx={{ flex: 1, p: { xs: 2, sm: 4 }, ml: { xs: 0, md: '240px' }, maxWidth: 1280 }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
             <Typography variant="h4">Access Control</Typography>
             <Button variant="contained" startIcon={<Add />} onClick={openCreate}>
@@ -472,6 +477,7 @@ export default function AccessControlPage() {
           {toast.msg}
         </Alert>
       </Snackbar>
-    </Box>
+      </Box>
+    </ThemeProvider>
   );
 }

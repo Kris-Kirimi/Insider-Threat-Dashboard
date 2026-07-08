@@ -1,14 +1,12 @@
 'use client';
 
-import React from 'react';
-import ITDepartmentSharedFiles from './dashboard/components/ITFilesPage';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
-const Page = () => {
-  return (
-     <>
-    <ITDepartmentSharedFiles/>
-</>
- );
-};
-
-export default Page;
+// Department-specific login pages have been consolidated into the single
+// /login entrance. This route now just forwards there.
+export default function ITEntry() {
+  const router = useRouter();
+  useEffect(() => { router.replace('/login'); }, [router]);
+  return null;
+}

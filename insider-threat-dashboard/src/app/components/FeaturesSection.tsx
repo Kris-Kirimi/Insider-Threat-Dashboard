@@ -1,202 +1,53 @@
 'use client';
 
 import React from 'react';
-import { Box, Typography, useTheme } from '@mui/material';
-import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
-import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
-import AssessmentIcon from '@mui/icons-material/Assessment';
-import MarkEmailReadIcon from '@mui/icons-material/MarkEmailRead';
+import { Box, Typography } from '@mui/material';
+import VerifiedUserOutlinedIcon from '@mui/icons-material/VerifiedUserOutlined';
+import NotificationsActiveOutlinedIcon from '@mui/icons-material/NotificationsActiveOutlined';
+import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
+import MarkEmailReadOutlinedIcon from '@mui/icons-material/MarkEmailReadOutlined';
+import Reveal from '@/app/components/Reveal';
+import { tokens, bezelShell, bezelCore } from '@/lib/theme';
 
-const FeaturesSection = () => {
-  const theme = useTheme();
+const features = [
+  { icon: <VerifiedUserOutlinedIcon />, title: 'Role-based access', body: 'Grant read, download or full control per user, role and department — and prove who can reach what.' },
+  { icon: <NotificationsActiveOutlinedIcon />, title: 'Real-time alerts', body: 'Detections stream to the console the instant they fire, with severity and evidence attached.' },
+  { icon: <AssessmentOutlinedIcon />, title: 'Risk scoring', body: 'Every user carries a rolling, time-decayed risk score so the riskiest people rise to the top.' },
+  { icon: <MarkEmailReadOutlinedIcon />, title: 'OTP + email auth', body: 'Password plus single-use, rate-limited email OTP keeps compromised credentials from getting in.' },
+];
 
+export default function FeaturesSection() {
   return (
-    <Box
-      sx={{
-        background: 'radial-gradient(circle, #1e1e1e 0%, #0f2027 100%)',
-        py: 8,
-        px: { xs: 2, md: 4 },
-        color: '#fff',
-        minHeight: '60vh',
-        position: 'relative',
-        overflow: 'hidden',
-        '&::before': {
-          content: '""',
-          position: 'absolute',
-          top: '-50%',
-          left: '-50%',
-          width: '200%',
-          height: '200%',
-          background: 'radial-gradient(circle at 30% 30%, rgba(0, 188, 212, 0.1) 0%, transparent 70%)',
-          zIndex: 0,
-        },
-      }}
-      id="features"
-    >
-      <Typography
-        variant="h4"
-        sx={{
-          textAlign: 'center',
-          fontWeight: 800,
-          mb: 6,
-          fontSize: { xs: '2rem', md: '2.5rem' },
-          letterSpacing: '0.2rem',
-          textTransform: 'uppercase',
-          textShadow: '0 2px 4px rgba(0, 0, 0, 0.5)',
-          position: 'relative',
-          zIndex: 1,
-        }}
-      >
-        Powerful Features
-      </Typography>
+    <Box id="features" sx={{ py: { xs: 12, md: 20 }, px: { xs: 3, md: 8 }, maxWidth: 1200, mx: 'auto' }}>
+      <Reveal>
+        <Typography sx={{ color: tokens.accent, textTransform: 'uppercase', letterSpacing: '0.22em', fontSize: 12, fontWeight: 600, mb: 2 }}>
+          Capabilities
+        </Typography>
+        <Typography variant="h2" sx={{ fontSize: { xs: '2rem', md: '3rem' }, maxWidth: 720 }}>
+          Everything you need to watch the inside.
+        </Typography>
+      </Reveal>
 
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
-          gap: { xs: 4, md: 6 },
-          justifyContent: 'center',
-          alignItems: 'center',
-          maxWidth: '1200px',
-          mx: 'auto',
-          position: 'relative',
-          zIndex: 1,
-        }}
-      >
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            textAlign: 'center',
-          }}
-        >
-          <Box
-            sx={{
-              width: 120,
-              height: 120,
-              borderRadius: '50%',
-              background: 'rgba(255, 255, 255, 0.15)', // Static background from hover
-              backdropFilter: 'blur(10px)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              mb: 2,
-              border: '1px solid rgba(0, 188, 212, 0.5)',
-              boxShadow: '0 4px 8px rgba(0, 0, 0, 0.2)', // Subtle shadow for card effect
-            }}
-          >
-            <VerifiedUserIcon sx={{ fontSize: 60, color: '#00bcd4' }} />
-          </Box>
-          <Typography variant="h6" fontWeight="bold" sx={{ mb: 1, color: '#e0e0e0' }}>
-            Role-Based Access
-          </Typography>
-          <Typography variant="body2" color="#bbb" sx={{ maxWidth: '200px', lineHeight: 1.5 }}>
-            Define and control who accesses what in your organization.
-          </Typography>
-        </Box>
-
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            textAlign: 'center',
-          }}
-        >
-          <Box
-            sx={{
-              width: 120,
-              height: 120,
-              borderRadius: '50%',
-              background: 'rgba(255, 255, 255, 0.15)', // Static background from hover
-              backdropFilter: 'blur(10px)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              mb: 2,
-              border: '1px solid rgba(0, 188, 212, 0.5)',
-              boxShadow: '0 4px 8px rgba(0, 0, 0, 0.2)', // Subtle shadow for card effect
-            }}
-          >
-            <NotificationsActiveIcon sx={{ fontSize: 60, color: '#00bcd4' }} />
-          </Box>
-          <Typography variant="h6" fontWeight="bold" sx={{ mb: 1, color: '#e0e0e0' }}>
-            Real-Time Alerts
-          </Typography>
-          <Typography variant="body2" color="#bbb" sx={{ maxWidth: '200px', lineHeight: 1.5 }}>
-            Get notified instantly when suspicious activities are detected.
-          </Typography>
-        </Box>
-
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            textAlign: 'center',
-          }}
-        >
-          <Box
-            sx={{
-              width: 120,
-              height: 120,
-              borderRadius: '50%',
-              background: 'rgba(255, 255, 255, 0.15)', // Static background from hover
-              backdropFilter: 'blur(10px)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              mb: 2,
-              border: '1px solid rgba(0, 188, 212, 0.5)',
-              boxShadow: '0 4px 8px rgba(0, 0, 0, 0.2)', // Subtle shadow for card effect
-            }}
-          >
-            <AssessmentIcon sx={{ fontSize: 60, color: '#00bcd4' }} />
-          </Box>
-          <Typography variant="h6" fontWeight="bold" sx={{ mb: 1, color: '#e0e0e0' }}>
-            Insightful Reports
-          </Typography>
-          <Typography variant="body2" color="#bbb" sx={{ maxWidth: '200px', lineHeight: 1.5 }}>
-            Generate detailed insights to inform your decisions.
-          </Typography>
-        </Box>
-
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            textAlign: 'center',
-          }}
-        >
-          <Box
-            sx={{
-              width: 120,
-              height: 120,
-              borderRadius: '50%',
-              background: 'rgba(255, 255, 255, 0.15)', // Static background from hover
-              backdropFilter: 'blur(10px)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              mb: 2,
-              border: '1px solid rgba(0, 188, 212, 0.5)',
-              boxShadow: '0 4px 8px rgba(0, 0, 0, 0.2)', // Subtle shadow for card effect
-            }}
-          >
-            <MarkEmailReadIcon sx={{ fontSize: 60, color: '#00bcd4' }} />
-          </Box>
-          <Typography variant="h6" fontWeight="bold" sx={{ mb: 1, color: '#e0e0e0' }}>
-            OTP + Email Auth
-          </Typography>
-          <Typography variant="body2" color="#bbb" sx={{ maxWidth: '200px', lineHeight: 1.5 }}>
-            Secure logins via OTP and verified email credentials.
-          </Typography>
-        </Box>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' }, gap: 2, mt: 6 }}>
+        {features.map((f, i) => (
+          <Reveal key={f.title} delay={i * 80}>
+            <Box sx={{ ...bezelShell, height: '100%' }}>
+              <Box sx={{ ...bezelCore, p: 3.5, height: '100%' }}>
+                <Box
+                  sx={{
+                    width: 44, height: 44, borderRadius: '13px', display: 'grid', placeItems: 'center',
+                    background: tokens.accentDim, border: `1px solid ${tokens.accent}33`, color: tokens.accent, mb: 2.5,
+                  }}
+                >
+                  {f.icon}
+                </Box>
+                <Typography sx={{ fontWeight: 700, mb: 1, fontSize: 16 }}>{f.title}</Typography>
+                <Typography sx={{ color: tokens.textDim, lineHeight: 1.6, fontSize: 14 }}>{f.body}</Typography>
+              </Box>
+            </Box>
+          </Reveal>
+        ))}
       </Box>
     </Box>
   );
-};
-
-export default FeaturesSection;
+}

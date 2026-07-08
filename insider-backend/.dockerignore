@@ -1,0 +1,12 @@
+# Keep the build context small and never bake secrets/artifacts into the image.
+.env
+venv/
+__pycache__/
+*.pyc
+db.sqlite3
+media/
+staticfiles/
+celerybeat-schedule*
+celerybeat.pid
+.git/
+monitoring/ml/models/

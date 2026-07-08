@@ -9,6 +9,10 @@ db.sqlite3
 insider-backend/media/
 insider-backend/staticfiles/
 
+# Celery Beat runtime schedule
+celerybeat-schedule*
+celerybeat.pid
+
 # Environment / secrets
 .env
 .env.*

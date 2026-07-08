@@ -28,12 +28,15 @@ import {
   MenuItem,
   Chip,
   Container,
+  ThemeProvider,
+  CssBaseline,
 } from '@mui/material';
 import { Edit, Delete, Person, KeyboardArrowLeft, Close, Add } from '@mui/icons-material';
 import { SelectChangeEvent } from '@mui/material/Select';
 import { useRouter } from 'next/navigation';
-import TopNavBar from '@/app/components/TopNavBar';
+import AuthedTopBar from '@/app/components/AuthedTopBar';
 import Sidebar from '../components/SideBar';
+import { appTheme, appBackground } from '@/lib/theme';
 
 interface User {
   id: number;
@@ -105,30 +108,12 @@ async function makeRequest(url: string, options: RequestInit = {}) {
   });
 }
 
-// FooterSection component (replace with your actual FooterSection if different)
 function FooterSection() {
   return (
-    <Box
-      component="footer"
-      sx={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        width: '100%',
-        background: 'rgba(15, 32, 39, 0.95)',
-        backdropFilter: 'blur(8px)',
-        color: '#fff',
-        py: 2,
-        textAlign: 'center',
-        zIndex: 1200,
-        borderTop: '1px solid rgba(0, 188, 212, 0.2)',
-      }}
-    >
-      <Container>
-        <Typography variant="body2" sx={{ color: '#bbb', fontSize: { xs: '0.9rem', sm: '1rem' } }}>
-          © {new Date().getFullYear()} Insider Threat Dashboard. All rights reserved.
-        </Typography>
-      </Container>
+    <Box component="footer" sx={{ mt: 6, py: 3, textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+      <Typography variant="body2" sx={{ color: '#5b6b7b', fontSize: 13 }}>
+        © {new Date().getFullYear()} InsiderDash — Insider Threat Monitoring
+      </Typography>
     </Box>
   );
 }
@@ -525,45 +510,28 @@ export default function AdminTabsPage() {
   }, {});
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        background: 'linear-gradient(135deg, #0a101f 0%, #1f2c3e 100%)',
-        display: 'flex',
-        flexDirection: 'column',
-        position: 'relative',
-        overflow: 'hidden',
-        '&::before': {
-          content: '""',
-          position: 'absolute',
-          top: '-20%',
-          left: '-20%',
-          width: '140%',
-          height: '140%',
-          background: 'radial-gradient(circle, rgba(0, 188, 212, 0.15) 0%, transparent 70%)',
-          animation: 'pulse 15s ease-in-out infinite',
-          zIndex: 0,
-          '@keyframes pulse': {
-            '0%': { transform: 'scale(1)', opacity: 0.15 },
-            '50%': { transform: 'scale(1.2)', opacity: 0.25 },
-            '100%': { transform: 'scale(1)', opacity: 0.15 },
-          },
-        },
-        pb: { xs: 8, sm: 6 }, // Prevent content overlap with fixed footer
-      }}
-    >
-      <TopNavBar />
-      <Box sx={{ display: 'flex', flex: 1 }}>
-        <Sidebar />
-        <Container
-          sx={{
-            flex: 1,
-            p: { xs: 2, sm: 3 },
-            ml: { xs: 0, md: '240px' },
-            position: 'relative',
-            zIndex: 1,
-          }}
-        >
+    <ThemeProvider theme={appTheme}>
+      <CssBaseline />
+      <Box
+        sx={{
+          minHeight: '100dvh',
+          background: appBackground,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        <AuthedTopBar />
+        <Box sx={{ display: 'flex', flex: 1 }}>
+          <Sidebar />
+          <Container
+            maxWidth={false}
+            sx={{
+              flex: 1,
+              p: { xs: 2, sm: 4 },
+              ml: { xs: 0, md: '240px' },
+              maxWidth: 1280,
+            }}
+          >
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography
               variant="h4"
@@ -1200,6 +1168,7 @@ export default function AdminTabsPage() {
         </Container>
       </Box>
       <FooterSection />
-    </Box>
+      </Box>
+    </ThemeProvider>
   );
 }

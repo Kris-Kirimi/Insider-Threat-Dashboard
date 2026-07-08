@@ -1,12 +1,17 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Plus_Jakarta_Sans } from 'next/font/google';
 import './global.css';
 
-const inter = Inter({ subsets: ['latin'] });
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  variable: '--font-jakarta',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
-  title: 'Insider Threat Monitoring Dashboard',
-  description: 'Your monitoring Tool',
+  title: 'InsiderDash — Insider Threat Monitoring',
+  description: 'Continuous behavioural monitoring and threat detection for authenticated users.',
 };
 
 export default function RootLayout({
@@ -15,17 +20,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={inter.className} style={{ 
-        background: '#0f2027',
-        backgroundSize: '400% 400%',
-        animation: 'sparkle 10s ease infinite',
-        minHeight: '100vh',
-        margin: 0,
-        padding: 0,
-      }}>
-        {children}
-      </body>
+    <html lang="en" className={jakarta.variable}>
+      <body>{children}</body>
     </html>
   );
 }
