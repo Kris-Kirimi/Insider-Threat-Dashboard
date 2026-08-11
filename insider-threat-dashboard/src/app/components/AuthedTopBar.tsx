@@ -4,8 +4,9 @@ import React, { useEffect, useState } from 'react';
 import { Box, Typography, Avatar, Menu, MenuItem, Divider, IconButton, Tooltip } from '@mui/material';
 import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
+import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import { useRouter } from 'next/navigation';
-import { getSessionUser, SessionUser } from '@/lib/auth';
+import { getSessionUser, settingsRouteFor, SessionUser } from '@/lib/auth';
 import { apiPost } from '@/lib/api';
 import { tokens } from '@/lib/theme';
 
@@ -125,6 +126,12 @@ export default function AuthedTopBar({ accent = tokens.accent }: { accent?: stri
               </Typography>
             </Box>
             <Divider sx={{ borderColor: tokens.hairline }} />
+            <MenuItem
+              onClick={() => { setAnchor(null); router.push(settingsRouteFor(user)); }}
+              sx={{ gap: 1.25, fontSize: 14, py: 1.25 }}
+            >
+              <SettingsRoundedIcon sx={{ fontSize: 18 }} /> Settings
+            </MenuItem>
             <MenuItem onClick={signOut} sx={{ gap: 1.25, fontSize: 14, py: 1.25 }}>
               <LogoutRoundedIcon sx={{ fontSize: 18 }} /> Sign out
             </MenuItem>

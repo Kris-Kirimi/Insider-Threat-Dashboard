@@ -11,12 +11,15 @@ class OTPInline(admin.TabularInline):
 class UserAdmin(BaseUserAdmin):
     ordering = ['email']
     list_display = ['email', 'full_name', 'department', 'role', 'is_staff', 'is_active']
-    list_filter = ['is_staff','is_active','department','role','groups']
+    # Filter and group by role, not Django Groups -- role is what the
+    # permission layer actually reads.
+    list_filter = ['is_staff','is_active','department','role']
     search_fields = ['email','full_name']
+    filter_horizontal = ('user_permissions',)
     fieldsets = (
         (None, {'fields': ('email','password')}),
         ('Personal', {'fields': ('full_name','department','role')}),
-        ('Permissions', {'fields': ('is_active','is_staff','is_superuser','groups','user_permissions')}),
+        ('Permissions', {'fields': ('is_active','is_staff','is_superuser','user_permissions')}),
         ('Important dates', {'fields': ('last_login',)}),
     )
     add_fieldsets = (

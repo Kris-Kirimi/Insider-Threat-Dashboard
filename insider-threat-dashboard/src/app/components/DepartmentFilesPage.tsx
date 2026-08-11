@@ -18,31 +18,34 @@ import CreateNewFolderRoundedIcon from '@mui/icons-material/CreateNewFolderRound
 import FolderOffRoundedIcon from '@mui/icons-material/FolderOffRounded';
 import AuthedTopBar from '@/app/components/AuthedTopBar';
 import { apiGet, apiPost, apiDownload } from '@/lib/api';
-import { ResourceDto, AccessLevel } from '@/types/resource';
+import { ResourceDto, AccessLevel, can } from '@/types/resource';
 import EditAccessDialog from '@/app/components/EditAccessDialog';
+import UploadResourceButton from '@/app/components/UploadResourceButton';
 import { appTheme, appBackground, tokens, bezelShell, bezelCore } from '@/lib/theme';
 
 type Toast = { open: boolean; msg: string; severity: 'success' | 'error' | 'info' };
 
-const CAN_DOWNLOAD: AccessLevel[] = ['read', 'download', 'write', 'delete', 'full_control'];
-const CAN_MANAGE: AccessLevel[] = ['full_control'];
-
 function accessChip(access: AccessLevel): { label: string; color: string } {
   if (access === 'full_control') return { label: 'Full control', color: tokens.severity.low };
   if (access === 'none') return { label: 'No access', color: tokens.severity.critical };
-  return { label: access.charAt(0).toUpperCase() + access.slice(1), color: tokens.severity.medium };
+  return {
+    label: access.replace('_', ' ').replace(/^\w/, (c) => c.toUpperCase()),
+    color: tokens.severity.medium,
+  };
 }
 
 export default function DepartmentFilesPage({
   departmentName,
-  departmentId,
   accent = tokens.accent,
 }: {
   departmentName: string;
-  departmentId: number;
   accent?: string;
 }) {
-  const { data, error, isLoading, mutate } = useSWR<ResourceDto[]>('/resources/', apiGet);
+  // Filtered server-side: this page previously received a department and
+  // ignored it, so every department showed the same list.
+  const { data, error, isLoading, mutate } = useSWR<ResourceDto[]>(
+    `/resources/?department=${encodeURIComponent(departmentName)}`, apiGet,
+  );
 
   const [searchTerm, setSearchTerm] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
@@ -77,10 +80,11 @@ export default function DepartmentFilesPage({
   async function handleCreate() {
     if (!newItem.name.trim()) return;
     try {
+      // `department` is not sent: it is read-only and set server-side from
+      // the creator's own department.
       await apiPost<ResourceDto>('/resources/', {
         name: newItem.name.trim(),
         is_folder: newItem.type === 'folder',
-        department: departmentId,
         content: newItem.type === 'file' ? newItem.content : undefined,
       });
       setCreateOpen(false);
@@ -195,6 +199,15 @@ export default function DepartmentFilesPage({
               sx={{ flexGrow: 1, minWidth: 240, maxWidth: 440 }}
             />
             <Box sx={{ display: 'flex', gap: 1 }}>
+              <UploadResourceButton
+                onUploaded={(created) => {
+                  mutate();
+                  setSelected(created);
+                  setEditOpen(true);   // straight into "who else may use this?"
+                  showToast(`Uploaded ${created.name}`, 'success');
+                }}
+                onError={(msg) => showToast(msg, 'error')}
+              />
               <Button
                 variant="text" startIcon={<AddRoundedIcon />}
                 onClick={() => { setNewItem({ name: '', type: 'file', content: '' }); setCreateOpen(true); }}
@@ -240,8 +253,10 @@ export default function DepartmentFilesPage({
               const access = file.access_for_current_user;
               const chip = accessChip(access);
               const locked = access === 'none';
-              const canDownload = !file.is_folder && CAN_DOWNLOAD.includes(access);
-              const canManage = CAN_MANAGE.includes(access);
+              // can() mirrors the backend ladder, so the padlock shown here
+              // always matches what the API will actually allow.
+              const canDownload = !file.is_folder && can(access, 'download');
+              const canManage = can(access, 'delete');
               return (
                 <Box
                   key={file.id}

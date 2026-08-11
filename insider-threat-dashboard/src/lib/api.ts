@@ -119,9 +119,14 @@ export async function apiDelete<T = any>(path: string) {
   return handleResponse<T>(await request(path, { method: 'DELETE' }));
 }
 
-export async function apiUpload<T = any>(path: string, file: File) {
+export async function apiUpload<T = any>(
+  path: string,
+  file: File,
+  fields: Record<string, string | number | boolean> = {},
+) {
   const formData = new FormData();
   formData.append('file', file);
+  Object.entries(fields).forEach(([key, value]) => formData.append(key, String(value)));
   // No Content-Type header: the browser sets the multipart boundary.
   return handleResponse<T>(await request(path, { method: 'POST', body: formData }));
 }

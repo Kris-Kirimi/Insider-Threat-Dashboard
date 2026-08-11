@@ -1,68 +1,75 @@
-from django.core.management.base import BaseCommand
-from monitoring.models import Alert
 from django.contrib.auth import get_user_model
-from django.utils import timezone
+from django.core.management.base import BaseCommand
+
+from monitoring.models import Alert
 
 User = get_user_model()
 
+# Action names must match what monitoring.utils actually emits, otherwise
+# seeded and real alerts never group together in the dashboard.
+EXAMPLE_ALERTS = [
+    {
+        'action': 'otp_failed',
+        'description': 'Multiple failed OTP attempts detected',
+        'severity': 'high',
+    },
+    {
+        'action': 'unusual_login_hour',
+        'description': 'User logged in during unusual hours',
+        'severity': 'medium',
+    },
+    {
+        'action': 'excessive_downloads',
+        'description': 'User downloaded many files in a short period',
+        'severity': 'high',
+    },
+    {
+        'action': 'suspicious_sequence',
+        'description': 'User performed suspicious sequence of actions',
+        'severity': 'high',
+    },
+]
+
+
 class Command(BaseCommand):
-    help = 'Generate sample alerts for test users'
+    help = (
+        'Generate sample alerts for demo purposes. For alerts backed by real '
+        'audit evidence, prefer: manage.py simulate_threat'
+    )
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--emails', nargs='*', default=None,
+            help='Target user emails (default: all non-staff users).',
+        )
 
     def handle(self, *args, **options):
-        # List of users by email with example alert info
-        sample_users = [
-            'insaiderdash@gmail.com',
-            'imkiley2003@gmail.com',
-            'christinekirimi46@gmail.com'
-        ]
+        emails = options.get('emails')
+        if emails:
+            users = list(User.objects.filter(email__in=emails))
+            missing = set(emails) - {u.email for u in users}
+            for email in sorted(missing):
+                self.stdout.write(self.style.WARNING(f'No user {email}, skipping.'))
+        else:
+            users = list(User.objects.filter(is_staff=False, is_active=True)[:5])
 
-        alerts_created = 0
-        now = timezone.now()
+        if not users:
+            self.stdout.write(self.style.WARNING(
+                'No target users found. Run: manage.py seed_initial --demo'
+            ))
+            return
 
-        for email in sample_users:
-            try:
-                user = User.objects.get(email=email)
-            except User.DoesNotExist:
-                self.stdout.write(f"User with email {email} not found, skipping.")
-                continue
-
-            # Example alert actions and descriptions for variety
-            example_alerts = [
-                {
-                    'action': 'failed_otp',
-                    'description': 'Multiple failed OTP attempts detected',
-                    'severity': 'high',
-                },
-                {
-                    'action': 'unusual_login_hour',
-                    'description': 'User logged in during unusual hours',
-                    'severity': 'medium',
-                },
-                {
-                    'action': 'excessive_downloads',
-                    'description': 'User downloaded many files in a short period',
-                    'severity': 'high',
-                },
-                {
-                    'action': 'suspicious_sequence',
-                    'description': 'User performed suspicious sequence of actions',
-                    'severity': 'high',
-                },
-                
-            ]
-
-            for alert_data in example_alerts:
-                # Avoid duplicates by action and user
-                alert, created = Alert.objects.get_or_create(
+        created_count = 0
+        for user in users:
+            for data in EXAMPLE_ALERTS:
+                _, created = Alert.objects.get_or_create(
                     user=user,
-                    action=alert_data['action'],
-                    description=alert_data['description'],
-                    severity=alert_data['severity'],
-                    cleared=False,
-                    defaults={'timestamp': now}
+                    action=data['action'],
+                    description=data['description'],
+                    defaults={'severity': data['severity']},
                 )
                 if created:
-                    alerts_created += 1
-                    self.stdout.write(f"Created alert '{alert.action}' for user {email}")
+                    created_count += 1
+                    self.stdout.write(f"Created alert '{data['action']}' for {user.email}")
 
-        self.stdout.write(f"Total new alerts created: {alerts_created}")
+        self.stdout.write(self.style.SUCCESS(f'Total new alerts created: {created_count}'))

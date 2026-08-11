@@ -1,1174 +1,585 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Box,
-  Button,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  IconButton,
-  Paper,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TextField,
-  Typography,
-  Checkbox,
-  FormControlLabel,
-  Avatar,
-  ListItem,
-  Select,
-  MenuItem,
-  Chip,
-  Container,
-  ThemeProvider,
-  CssBaseline,
+  Alert, Avatar, Box, Button, Checkbox, Chip, CircularProgress, Container,
+  Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel,
+  IconButton, MenuItem, Snackbar, Stack, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, TextField, ThemeProvider, Tooltip,
+  Typography, CssBaseline,
 } from '@mui/material';
-import { Edit, Delete, Person, KeyboardArrowLeft, Close, Add } from '@mui/icons-material';
-import { SelectChangeEvent } from '@mui/material/Select';
-import { useRouter } from 'next/navigation';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
+import EditRoundedIcon from '@mui/icons-material/EditRounded';
+import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
+import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
+import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
+import LockRoundedIcon from '@mui/icons-material/LockRounded';
 import AuthedTopBar from '@/app/components/AuthedTopBar';
 import Sidebar from '../components/SideBar';
-import { appTheme, appBackground } from '@/lib/theme';
+import FooterSection from '@/app/components/FooterSection';
+import EditAccessDialog from '@/app/components/EditAccessDialog';
+import UploadResourceButton from '@/app/components/UploadResourceButton';
+import { apiGet, apiPost, apiPatch, apiDelete, apiDownload } from '@/lib/api';
+import { ResourceDto, can } from '@/types/resource';
+import { appTheme, appBackground, tokens, bezelShell, bezelCore } from '@/lib/theme';
 
-interface User {
+interface AdminUser {
   id: number;
   email: string;
   full_name: string;
   department?: string | null;
-  group?: string | null;
+  role?: number | null;
+  role_name?: string | null;
+  role_level?: number | null;
+  is_staff?: boolean;
   is_simulated_threat: boolean;
 }
 
-interface Resource {
+interface Role {
   id: number;
-  name: string;
-  path: string | null;
-  is_folder: boolean;
+  name: string;      // "Manager (Finance)" -- composite, as EditAccessDialog needs
+  label: string;     // "Manager"
+  level: number;
   department: string;
-  access_level: string;
 }
 
-interface Group {
-  id: number;
-  name: string;
-}
+interface Dept { id: number; name: string; }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://127.0.0.1:8000';
+type Toast = { open: boolean; msg: string; severity: 'success' | 'error' | 'info' };
 
-// Helper function to get cookie value
-function getCookie(name: string) {
-  let cookieValue = null;
-  if (typeof document !== 'undefined' && document.cookie && document.cookie !== '') {
-    const cookies = document.cookie.split(';');
-    for (let cookie of cookies) {
-      cookie = cookie.trim();
-      if (cookie.startsWith(name + '=')) {
-        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-        break;
-      }
-    }
-  }
-  return cookieValue;
-}
+const emptyUserForm = {
+  email: '', full_name: '', department: '', role: '' as '' | number,
+  password: '', is_simulated_threat: false,
+};
 
-// Helper function to make authenticated requests with CSRF protection
-async function makeRequest(url: string, options: RequestInit = {}) {
-  await fetch(`${API_BASE}/api/csrf/`, {
-    credentials: 'include',
-  });
+export default function AdminUsersPage() {
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [depts, setDepts] = useState<Dept[]>([]);
+  const [resources, setResources] = useState<ResourceDto[]>([]);
 
-  const headers = new Headers(options.headers || {});
-  if (!headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json');
-  }
-  if (!headers.has('X-CSRFToken')) {
-    const csrfToken = getCookie('csrftoken');
-    if (csrfToken) {
-      headers.set('X-CSRFToken', csrfToken);
-    }
-  }
-
-  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('accessToken') : null;
-  if (token && !headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
-
-  return fetch(url, {
-    ...options,
-    headers,
-    credentials: 'include',
-  });
-}
-
-function FooterSection() {
-  return (
-    <Box component="footer" sx={{ mt: 6, py: 3, textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-      <Typography variant="body2" sx={{ color: '#5b6b7b', fontSize: 13 }}>
-        © {new Date().getFullYear()} InsiderDash — Insider Threat Monitoring
-      </Typography>
-    </Box>
-  );
-}
-
-export default function AdminTabsPage() {
-  const [users, setUsers] = useState<User[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
-  const [usersError, setUsersError] = useState<string>('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [userModalOpen, setUserModalOpen] = useState(false);
-  const [userModalMode, setUserModalMode] = useState<'add' | 'edit'>('add');
-  const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [userFormData, setUserFormData] = useState({
-    email: '',
-    full_name: '',
-    department: '',
-    group: '',
-    password: '',
-    is_simulated_threat: false,
-  });
-  const [saving, setSaving] = useState(false);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [resources, setResources] = useState<Resource[]>([]);
-  const [filesLoading, setFilesLoading] = useState(false);
+  const [usersError, setUsersError] = useState('');
   const [filesError, setFilesError] = useState('');
-  const [fileModalOpen, setFileModalOpen] = useState(false);
-  const [fileModalMode, setFileModalMode] = useState<'add' | 'edit'>('add');
-  const [editingResource, setEditingResource] = useState<Resource | null>(null);
-  const [fileFormData, setFileFormData] = useState({
-    name: '',
-    department: '',
-    access_level: '',
-    is_folder: false,
-  });
-  const [selectedUsers, setSelectedUsers] = useState<User[]>([]);
-  const [updateSetting, setUpdateSetting] = useState<string>('');
-  const [updateValue, setUpdateValue] = useState<string | boolean>('');
-  const token = useMemo(() => typeof localStorage !== 'undefined' ? localStorage.getItem('accessToken') : null, []);
-  const router = useRouter();
+  const [search, setSearch] = useState('');
+  const [toast, setToast] = useState<Toast>({ open: false, msg: '', severity: 'info' });
 
-  useEffect(() => {
-    if (!token) return;
+  const [userModalOpen, setUserModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
+  const [userForm, setUserForm] = useState(emptyUserForm);
+  const [saving, setSaving] = useState(false);
 
-    async function fetchGroups() {
-      try {
-        const res = await makeRequest(`${API_BASE}/api/groups/`);
-        if (!res.ok) throw new Error(`Failed to fetch groups: ${res.status}`);
-        const data = await res.json();
-        setGroups(data);
-      } catch (e) {}
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [bulkRole, setBulkRole] = useState<'' | number>('');
+
+  const [accessFor, setAccessFor] = useState<ResourceDto | null>(null);
+  const [busyResourceId, setBusyResourceId] = useState<number | null>(null);
+
+  const show = (msg: string, severity: Toast['severity'] = 'info') =>
+    setToast({ open: true, msg, severity });
+
+  const errorText = (err: any, fallback: string) => {
+    try {
+      const parsed = JSON.parse(err?.message || '{}');
+      const first = parsed.detail ?? Object.values(parsed)[0];
+      return Array.isArray(first) ? first.join(' ') : String(first ?? fallback);
+    } catch {
+      return fallback;
     }
-    fetchGroups();
-  }, [token]);
+  };
 
-  const fetchUsers = async () => {
-    if (!token) {
-      setUsersError('You are not logged in.');
-      return;
-    }
+  // ---------------------------------------------------------------- loading
+  const loadUsers = useCallback(async () => {
     setUsersLoading(true);
     setUsersError('');
     try {
-      const res = await makeRequest(`${API_BASE}/api/users/`);
-      if (!res.ok) throw new Error(`Error: ${res.status}`);
-      const data = await res.json();
-      setUsers(data);
-    } catch (e: any) {
-      setUsersError(e.message || 'Failed to fetch users.');
+      setUsers(await apiGet<AdminUser[]>('/users/'));
+    } catch (err: any) {
+      setUsersError(errorText(err, 'Failed to load users'));
     } finally {
       setUsersLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => {
-    fetchUsers();
-  }, [token]);
-
-  const fetchFiles = async () => {
-    if (!token) {
-      setFilesError('You are not logged in.');
-      return;
-    }
-    setFilesLoading(true);
+  const loadResources = useCallback(async () => {
     setFilesError('');
     try {
-      const res = await makeRequest(`${API_BASE}/api/department_resources/`);
-      if (!res.ok) throw new Error(`Error: ${res.status}`);
-      const data = await res.json();
-      setResources(data);
-    } catch (e: any) {
-      setFilesError(e.message || 'Failed to fetch resources.');
-    } finally {
-      setFilesLoading(false);
+      setResources(await apiGet<ResourceDto[]>('/resources/'));
+    } catch (err: any) {
+      setFilesError(errorText(err, 'Failed to load files'));
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchFiles();
-  }, [token]);
+    loadUsers();
+    loadResources();
+    apiGet<Role[]>('/roles/').then(setRoles).catch(() => undefined);
+    apiGet<Dept[]>('/departments/').then(setDepts).catch(() => undefined);
+  }, [loadUsers, loadResources]);
 
-  const handleLogout = async () => {
-    try {
-      await makeRequest(`${API_BASE}/api/logout/`, {
-        method: 'POST',
-      });
-      localStorage.removeItem('accessToken');
-      document.cookie = 'csrftoken=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
-      document.cookie = 'sessionid=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
-      router.push('/login');
-    } catch (error) {
-      console.error('Logout failed:', error);
-      localStorage.removeItem('accessToken');
-      document.cookie = 'csrftoken=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
-      document.cookie = 'sessionid=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
-      router.push('/login');
-    }
-  };
-
-  const filteredUsers = users.filter(
-    u => u.email.toLowerCase().includes(searchTerm.toLowerCase()) || (u.full_name && u.full_name.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
-
-  const addToSelected = (user: User) => {
-    if (!selectedUsers.find(u => u.id === user.id)) {
-      setSelectedUsers([...selectedUsers, user]);
-    }
-  };
-
-  const removeSelected = (user: User) => {
-    setSelectedUsers(selectedUsers.filter(u => u.id !== user.id));
-  };
-
-  const openUserAddModal = () => {
-    setUserModalMode('add');
+  // ------------------------------------------------------------------ users
+  function openCreate() {
     setEditingUser(null);
-    setUserFormData({ email: '', full_name: '', department: '', group: '', password: '', is_simulated_threat: false });
+    setUserForm(emptyUserForm);
     setUserModalOpen(true);
-  };
+  }
 
-  const openUserEditModal = (user: User) => {
-    setUserModalMode('edit');
+  function openEdit(user: AdminUser) {
     setEditingUser(user);
-    setUserFormData({
+    setUserForm({
       email: user.email,
-      full_name: user.full_name || '',
+      full_name: user.full_name,
       department: user.department || '',
-      group: user.group || '',
+      role: user.role ?? '',
       password: '',
       is_simulated_threat: user.is_simulated_threat,
     });
     setUserModalOpen(true);
-  };
+  }
 
-  const closeUserModal = () => {
-    setUserModalOpen(false);
-    setUsersError('');
-  };
-
-  const handleUserInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | SelectChangeEvent<string>) => {
-    const { name, value } = e.target as any;
-    setUserFormData({ ...userFormData, [name]: value });
-    setUsersError('');
-  };
-
-  const handleUserCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, checked } = e.target;
-    setUserFormData({ ...userFormData, [name]: checked });
-  };
-
-  const handleSaveUser = async () => {
-    if (!userFormData.email || !userFormData.full_name || !userFormData.department || !userFormData.group) {
-      setUsersError('Email, full name, department, and group are required.');
+  async function saveUser() {
+    if (!userForm.email || !userForm.full_name) {
+      show('Email and full name are required', 'error');
       return;
     }
-    if (userModalMode === 'add' && !userFormData.password) {
-      setUsersError('Password is required for new users.');
-      return;
-    }
-
     setSaving(true);
-    setUsersError('');
     try {
-      let res;
-      const payload: any = {
-        email: userFormData.email,
-        full_name: userFormData.full_name,
-        department: userFormData.department || null,
-        group: userFormData.group || null,
-        is_simulated_threat: userFormData.is_simulated_threat,
+      // `role` is what every authorization decision reads -- it is the field
+      // that must be set. (Django Groups were removed; assigning one granted
+      // nothing.)
+      const payload: Record<string, unknown> = {
+        email: userForm.email,
+        full_name: userForm.full_name,
+        department: userForm.department || null,
+        role: userForm.role === '' ? null : userForm.role,
+        is_simulated_threat: userForm.is_simulated_threat,
       };
-      if (userModalMode === 'add') {
-        payload.password = userFormData.password;
-        res = await makeRequest(`${API_BASE}/api/users/`, {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-      } else if (userModalMode === 'edit' && editingUser) {
-        if (userFormData.password) {
-          payload.password = userFormData.password;
-        }
-        res = await makeRequest(`${API_BASE}/api/users/${editingUser.id}/`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-        });
+      if (userForm.password) payload.password = userForm.password;
+
+      if (editingUser) {
+        // PATCH, not PUT: `email` is writable (an admin must set it on
+        // create), which makes it required on PUT.
+        await apiPatch(`/users/${editingUser.id}/`, payload);
+        show('User updated', 'success');
+      } else {
+        await apiPost('/users/', payload);
+        show('User created', 'success');
       }
-      if (!res || !res.ok) {
-        const errData = await res?.json();
-        throw new Error(errData?.detail || 'Failed to save user');
-      }
-      await fetchUsers();
-      closeUserModal();
-    } catch (e: any) {
-      setUsersError(e.message || 'Failed to save user');
+      setUserModalOpen(false);
+      loadUsers();
+    } catch (err: any) {
+      show(errorText(err, 'Could not save the user'), 'error');
     } finally {
       setSaving(false);
     }
-  };
+  }
 
-  const handleDeleteUser = async (user: User) => {
-    if (!confirm(`Are you sure you want to delete ${user.email}? This action cannot be undone.`)) return;
-    if (!token) return setUsersError('You are not logged in.');
-
-    setUsersLoading(true);
-    setUsersError('');
+  async function deleteUser(user: AdminUser) {
+    if (!window.confirm(`Delete ${user.email}?`)) return;
     try {
-      const res = await makeRequest(`${API_BASE}/api/users/${user.id}/`, {
-        method: 'DELETE',
+      await apiDelete(`/users/${user.id}/`);
+      show('User deleted', 'success');
+      loadUsers();
+    } catch (err: any) {
+      show(errorText(err, 'Could not delete the user'), 'error');
+    }
+  }
+
+  async function applyBulkRole() {
+    if (bulkRole === '' || selectedIds.length === 0) return;
+    try {
+      await Promise.all(selectedIds.map((id) =>
+        apiPatch(`/users/${id}/`, { role: bulkRole })));
+      show(`Role applied to ${selectedIds.length} user(s)`, 'success');
+      setSelectedIds([]);
+      setBulkRole('');
+      loadUsers();
+    } catch (err: any) {
+      show(errorText(err, 'Bulk update failed'), 'error');
+    }
+  }
+
+  async function toggleSimulatedThreat(user: AdminUser) {
+    try {
+      await apiPatch(`/users/${user.id}/`, {
+        is_simulated_threat: !user.is_simulated_threat,
       });
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData?.detail || 'Failed to delete user');
-      }
-      await fetchUsers();
-    } catch (e: any) {
-      setUsersError(e.message || 'Failed to delete user');
-    } finally {
-      setUsersLoading(false);
+      loadUsers();
+    } catch (err: any) {
+      show(errorText(err, 'Could not update the user'), 'error');
     }
-  };
+  }
 
-  const handleApplySettings = async () => {
-    if (!updateSetting || selectedUsers.length === 0) return;
-    setSaving(true);
-    setUsersError('');
+  // -------------------------------------------------------------- resources
+  async function deleteResource(resource: ResourceDto) {
+    if (!window.confirm(`Delete ${resource.name}?`)) return;
     try {
-      for (const user of selectedUsers) {
-        const payload: any = {
-          [updateSetting]: updateSetting === 'is_simulated_threat' ? !!updateValue : updateValue,
-        };
-        const res = await makeRequest(`${API_BASE}/api/users/${user.id}/`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          const errData = await res.json();
-          throw new Error(errData?.detail || 'Failed to update user');
-        }
-      }
-      await fetchUsers();
-      setSelectedUsers([]);
-      setUpdateSetting('');
-      setUpdateValue('');
-    } catch (e: any) {
-      setUsersError(e.message || 'Failed to apply settings');
-    } finally {
-      setSaving(false);
+      await apiDelete(`/resources/${resource.id}/`);
+      show('File deleted', 'success');
+      loadResources();
+    } catch (err: any) {
+      show(err?.status === 403 ? 'You cannot delete this file' : 'Delete failed', 'error');
     }
-  };
+  }
 
-  const openAddFileModal = (department: string) => {
-    setFileModalMode('add');
-    setEditingResource(null);
-    setFileFormData({ name: '', department: department, access_level: '', is_folder: false });
-    setFileModalOpen(true);
-  };
-
-  const openEditFileModal = (resource: Resource) => {
-    setFileModalMode('edit');
-    setEditingResource(resource);
-    setFileFormData({
-      name: resource.name,
-      department: resource.department,
-      access_level: resource.access_level,
-      is_folder: resource.is_folder,
-    });
-    setFileModalOpen(true);
-  };
-
-  const closeFileModal = () => {
-    setFileModalOpen(false);
-    setFilesError('');
-  };
-
-  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement> | SelectChangeEvent<string>) => {
-    const { name, value } = e.target as any;
-    setFileFormData({ ...fileFormData, [name]: value });
-    setFilesError('');
-  };
-
-  const handleFileCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, checked } = e.target;
-    setFileFormData({ ...fileFormData, [name]: checked });
-  };
-
-  const handleAddFile = async () => {
-    if (!fileFormData.name || !fileFormData.department || !fileFormData.access_level) {
-      setFilesError('Name, department, and access level are required.');
-      return;
-    }
-    setSaving(true);
-    setFilesError('');
+  async function downloadResource(resource: ResourceDto) {
+    setBusyResourceId(resource.id);
     try {
-      const payload = {
-        name: fileFormData.name,
-        path: null,
-        is_folder: fileFormData.is_folder,
-        department: fileFormData.department,
-        access_level: fileFormData.access_level,
-      };
-      const res = await makeRequest(`${API_BASE}/api/department_resources/`, {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData?.detail || 'Failed to add resource');
-      }
-      await fetchFiles();
-      closeFileModal();
-    } catch (e: any) {
-      setFilesError(e.message || 'Failed to add resource');
+      await apiDownload(`/resources/${resource.id}/download/`, resource.name);
+    } catch (err: any) {
+      show(err?.status === 403
+        ? 'You do not have download permission for this file'
+        : 'Download failed', 'error');
     } finally {
-      setSaving(false);
+      setBusyResourceId(null);
     }
-  };
+  }
 
-  const handleUpdateFile = async () => {
-    if (!fileFormData.name || !fileFormData.access_level) {
-      setFilesError('Name and access level are required.');
-      return;
-    }
-    if (!editingResource) return;
-    setSaving(true);
-    setFilesError('');
-    try {
-      const payload = {
-        name: fileFormData.name,
-        path: null,
-        is_folder: fileFormData.is_folder,
-        department: fileFormData.department,
-        access_level: fileFormData.access_level,
-      };
-      const res = await makeRequest(`${API_BASE}/api/department_resources/${editingResource.id}/`, {
-        method: 'PUT',
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData?.detail || 'Failed to update resource');
-      }
-      await fetchFiles();
-      closeFileModal();
-    } catch (e: any) {
-      setFilesError(e.message || 'Failed to update resource');
-    } finally {
-      setSaving(false);
-    }
-  };
+  const filteredUsers = useMemo(() => {
+    const needle = search.toLowerCase();
+    return users.filter((u) =>
+      u.email.toLowerCase().includes(needle) ||
+      (u.full_name || '').toLowerCase().includes(needle));
+  }, [users, search]);
 
-  const handleDeleteFile = async (resource: Resource) => {
-    if (!confirm(`Are you sure you want to delete ${resource.name}? This action cannot be undone.`)) return;
-    setFilesLoading(true);
-    setFilesError('');
-    try {
-      const res = await makeRequest(`${API_BASE}/api/department_resources/${resource.id}/`, {
-        method: 'DELETE',
-      });
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData?.detail || 'Failed to delete resource');
-      }
-      await fetchFiles();
-    } catch (e: any) {
-      setFilesError(e.message || 'Failed to delete resource');
-    } finally {
-      setFilesLoading(false);
-    }
-  };
+  const resourcesByDept = useMemo(() => {
+    const groups: Record<string, ResourceDto[]> = {};
+    resources.forEach((r) => { (groups[r.department] ||= []).push(r); });
+    return groups;
+  }, [resources]);
 
-  const resourcesByDepartment = resources.reduce<Record<string, Resource[]>>((acc, resource) => {
-    if (!acc[resource.department]) acc[resource.department] = [];
-    acc[resource.department].push(resource);
-    return acc;
-  }, {});
+  const initials = (user: AdminUser) =>
+    (user.full_name || user.email).split(/[\s@.]+/).filter(Boolean).slice(0, 2)
+      .map((s) => s[0]?.toUpperCase()).join('');
 
   return (
     <ThemeProvider theme={appTheme}>
       <CssBaseline />
-      <Box
-        sx={{
-          minHeight: '100dvh',
-          background: appBackground,
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
+      <Box sx={{ minHeight: '100dvh', background: appBackground, display: 'flex', flexDirection: 'column' }}>
         <AuthedTopBar />
         <Box sx={{ display: 'flex', flex: 1 }}>
           <Sidebar />
-          <Container
-            maxWidth={false}
-            sx={{
-              flex: 1,
-              p: { xs: 2, sm: 4 },
-              ml: { xs: 0, md: '240px' },
-              maxWidth: 1280,
-            }}
-          >
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <Typography
-              variant="h4"
-              sx={{
-                color: '#00bcd4',
-                fontWeight: 'bold',
-                textAlign: { xs: 'center', sm: 'left' },
-                fontSize: { xs: '1.8rem', sm: '2.5rem' },
-                textShadow: '0 2px 4px rgba(0, 0, 0, 0.5)',
-              }}
-            >
-              Admin Management
-            </Typography>
-            <Button
-              variant="contained"
-              color="secondary"
-              onClick={handleLogout}
-              sx={{
-                borderRadius: 2,
-                px: 3,
-                '&:hover': { background: '#d32f2f' },
-              }}
-            >
-              Log Out
-            </Button>
-          </Box>
-
-          {usersLoading ? (
-            <Box sx={{ textAlign: 'center', mt: 5 }}>
-              <CircularProgress sx={{ color: '#00bcd4' }} />
+          <Container maxWidth={false} sx={{ flex: 1, p: { xs: 2, sm: 4 }, ml: { xs: 0, md: '240px' }, maxWidth: 1280 }}>
+            <Box sx={{ animation: 'riseIn 600ms cubic-bezier(0.32,0.72,0,1) both' }}>
+              <Typography sx={{ color: tokens.accent, textTransform: 'uppercase', letterSpacing: '0.22em', fontSize: 12, fontWeight: 600, mb: 1.5 }}>
+                Administration
+              </Typography>
+              <Typography variant="h4">Users &amp; files</Typography>
+              <Typography sx={{ mt: 1, color: tokens.textDim, maxWidth: 640 }}>
+                A person&apos;s <strong>role</strong> decides what they can do — level 3
+                (Manager) and above may write and delete within their department.
+              </Typography>
             </Box>
-          ) : usersError ? (
-            <Typography color="error" sx={{ mb: 2, background: 'rgba(244, 67, 54, 0.2)', p: 2, borderRadius: 2 }}>
-              {usersError}
-            </Typography>
-          ) : (
-            <Stack spacing={4}>
-              <Paper
-                elevation={6}
-                sx={{
-                  p: 3,
-                  borderRadius: 3,
-                  background: 'rgba(31, 44, 62, 0.9)',
-                  backdropFilter: 'blur(10px)',
-                  border: '1px solid rgba(0, 188, 212, 0.2)',
+
+            {/* ------------------------------------------------------ users */}
+            <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap
+              sx={{ mt: 4, mb: 2, alignItems: 'center' }}>
+              <TextField
+                size="small" placeholder="Search users" value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                InputProps={{
+                  startAdornment: <SearchRoundedIcon sx={{ color: tokens.textFaint, mr: 1, fontSize: 20 }} />,
+                  sx: { borderRadius: 999, background: tokens.surface },
                 }}
-              >
-                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-                  <Typography variant="h6" sx={{ color: '#00bcd4', fontWeight: 'bold' }}>
-                    Select Users
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    startIcon={<Add />}
-                    onClick={openUserAddModal}
-                    sx={{ borderRadius: 2 }}
-                  >
-                    Add User
-                  </Button>
-                </Stack>
-                <Box
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    border: '1px solid rgba(0, 188, 212, 0.5)',
-                    borderRadius: 2,
-                    p: 0.5,
-                    mb: 2,
-                    background: 'rgba(255, 255, 255, 0.1)',
-                  }}
-                >
-                  <IconButton size="small" sx={{ color: '#00bcd4' }}>
-                    <KeyboardArrowLeft />
-                  </IconButton>
+                sx={{ minWidth: 260 }}
+              />
+              <Button startIcon={<AddRoundedIcon />} onClick={openCreate}
+                sx={{ color: tokens.text, border: `1px solid ${tokens.hairline}`, '&:hover': { borderColor: tokens.accent } }}>
+                New user
+              </Button>
+
+              {selectedIds.length > 0 && (
+                <>
                   <TextField
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    variant="standard"
-                    InputProps={{ disableUnderline: true }}
-                    sx={{ flex: 1, mx: 1, color: '#fff', input: { color: '#fff' } }}
-                    placeholder="Search by email or name"
-                  />
-                  <IconButton size="small" onClick={() => setSearchTerm('')} sx={{ color: '#00bcd4' }}>
-                    <Close />
-                  </IconButton>
-                </Box>
-                <Stack spacing={0} sx={{ mb: 2, maxHeight: 200, overflowY: 'auto' }}>
-                  {filteredUsers.length === 0 ? (
-                    <Typography sx={{ color: '#bbb', textAlign: 'center', py: 2 }}>
-                      No users found
-                    </Typography>
-                  ) : (
-                    filteredUsers.map(user => (
-                      <ListItem
-                        key={user.id}
-                        button
-                        onClick={() => addToSelected(user)}
-                        sx={{
-                          py: 1,
-                          '&:hover': { background: 'rgba(0, 188, 212, 0.2)' },
-                          transition: 'background 0.3s',
-                        }}
-                      >
-                        <Avatar sx={{ bgcolor: '#00bcd4', mr: 2 }}>
-                          <Person />
-                        </Avatar>
-                        <Typography sx={{ color: '#fff' }}>{user.full_name}</Typography>
-                      </ListItem>
-                    ))
-                  )}
-                </Stack>
-                <Typography variant="body2" sx={{ color: '#00bcd4', mb: 1, fontWeight: 'bold' }}>
-                  Selected Users:
-                </Typography>
-                <Stack direction="row" spacing={1} flexWrap="wrap" mb={2}>
-                  {selectedUsers.length === 0 ? (
-                    <Typography sx={{ color: '#bbb' }}>No users selected</Typography>
-                  ) : (
-                    selectedUsers.map(user => (
-                      <Chip
-                        key={user.id}
-                        label={user.full_name}
-                        onDelete={() => removeSelected(user)}
-                        sx={{
-                          borderColor: '#00bcd4',
-                          color: '#fff',
-                          background: 'rgba(0, 188, 212, 0.2)',
-                          '&:hover': { background: 'rgba(0, 188, 212, 0.3)' },
-                        }}
-                      />
-                    ))
-                  )}
-                </Stack>
-              </Paper>
-
-              <Paper
-                elevation={6}
-                sx={{
-                  p: 3,
-                  borderRadius: 3,
-                  background: 'rgba(31, 44, 62, 0.9)',
-                  backdropFilter: 'blur(10px)',
-                  border: '1px solid rgba(0, 188, 212, 0.2)',
-                }}
-              >
-                <Typography variant="h6" sx={{ color: '#00bcd4', fontWeight: 'bold', mb: 2 }}>
-                  Update User Settings
-                </Typography>
-                <Select
-                  value={updateSetting}
-                  onChange={(e) => setUpdateSetting(e.target.value as string)}
-                  displayEmpty
-                  fullWidth
-                  sx={{
-                    mb: 2,
-                    color: '#fff',
-                    '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(0, 188, 212, 0.5)' },
-                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00bcd4' },
-                    '.MuiSvgIcon-root': { color: '#fff' },
-                  }}
-                >
-                  <MenuItem value="" disabled>
-                    Choose Setting
-                  </MenuItem>
-                  <MenuItem value="department">Department</MenuItem>
-                  <MenuItem value="group">Group</MenuItem>
-                  <MenuItem value="is_simulated_threat">Simulated Threat</MenuItem>
-                </Select>
-                {updateSetting && (
-                  <Box sx={{ mb: 2 }}>
-                    {updateSetting === 'department' && (
-                      <Select
-                        value={updateValue as string}
-                        onChange={(e) => setUpdateValue(e.target.value as string)}
-                        fullWidth
-                        sx={{
-                          color: '#fff',
-                          '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(0, 188, 212, 0.5)' },
-                          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00bcd4' },
-                          '.MuiSvgIcon-root': { color: '#fff' },
-                        }}
-                      >
-                        <MenuItem value="IT">IT</MenuItem>
-                        <MenuItem value="Finance">Finance</MenuItem>
-                      </Select>
-                    )}
-                    {updateSetting === 'group' && (
-                      <Select
-                        value={updateValue as string}
-                        onChange={(e) => setUpdateValue(e.target.value as string)}
-                        fullWidth
-                        sx={{
-                          color: '#fff',
-                          '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(0, 188, 212, 0.5)' },
-                          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00bcd4' },
-                          '.MuiSvgIcon-root': { color: '#fff' },
-                        }}
-                      >
-                        <MenuItem value="intern">Intern</MenuItem>
-                        <MenuItem value="Regular Staff">Regular Staff</MenuItem>
-                        <MenuItem value="Department Leads">Department Leads</MenuItem>
-                        <MenuItem value="Managers">Managers</MenuItem>
-                      </Select>
-                    )}
-                    {updateSetting === 'is_simulated_threat' && (
-                      <FormControlLabel
-                        control={<Checkbox checked={!!updateValue} onChange={(e) => setUpdateValue(e.target.checked)} />}
-                        label="Simulate Insider Threat"
-                        sx={{ color: '#fff' }}
-                      />
-                    )}
-                  </Box>
-                )}
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={handleApplySettings}
-                  disabled={saving || selectedUsers.length === 0 || !updateSetting || !updateValue}
-                  sx={{ borderRadius: 2 }}
-                >
-                  Apply Settings
-                </Button>
-              </Paper>
-
-              <Paper
-                elevation={6}
-                sx={{
-                  p: 3,
-                  borderRadius: 3,
-                  background: 'rgba(31, 44, 62, 0.9)',
-                  backdropFilter: 'blur(10px)',
-                  border: '1px solid rgba(0, 188, 212, 0.2)',
-                }}
-              >
-                <Typography variant="h6" sx={{ color: '#00bcd4', fontWeight: 'bold', mb: 2 }}>
-                  Users Data
-                </Typography>
-                <TableContainer sx={{ maxHeight: 300, borderRadius: 2, overflow: 'hidden' }}>
-                  <Table stickyHeader size="small">
-                    <TableHead>
-                      <TableRow sx={{ bgcolor: '#00bcd4' }}>
-                        <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Email</TableCell>
-                        <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Full Name</TableCell>
-                        <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Department</TableCell>
-                        <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Group</TableCell>
-                        <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Simulated Threat</TableCell>
-                        <TableCell sx={{ color: '#fff', fontWeight: 'bold', textAlign: 'right' }}>Actions</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {filteredUsers.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={6} align="center" sx={{ color: '#bbb' }}>
-                            No users found
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        filteredUsers.map(user => (
-                          <TableRow
-                            key={user.id}
-                            hover
-                            sx={{
-                              '&:hover': { background: 'rgba(0, 188, 212, 0.2)' },
-                              transition: 'background 0.3s',
-                            }}
-                          >
-                            <TableCell sx={{ color: '#fff' }}>{user.email}</TableCell>
-                            <TableCell sx={{ color: '#fff' }}>{user.full_name}</TableCell>
-                            <TableCell sx={{ color: '#fff' }}>{user.department || '-'}</TableCell>
-                            <TableCell sx={{ color: '#fff' }}>{user.group || '-'}</TableCell>
-                            <TableCell sx={{ color: '#fff' }}>{user.is_simulated_threat ? 'Yes' : 'No'}</TableCell>
-                            <TableCell sx={{ textAlign: 'right' }}>
-                              <IconButton
-                                color="primary"
-                                onClick={() => openUserEditModal(user)}
-                                size="small"
-                                aria-label="edit user"
-                                sx={{ '&:hover': { background: 'rgba(0, 188, 212, 0.3)' } }}
-                              >
-                                <Edit />
-                              </IconButton>
-                              <IconButton
-                                color="error"
-                                onClick={() => handleDeleteUser(user)}
-                                size="small"
-                                aria-label="delete user"
-                                sx={{ '&:hover': { background: 'rgba(244, 67, 54, 0.3)' } }}
-                              >
-                                <Delete />
-                              </IconButton>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </Paper>
-
-              <Paper
-                elevation={6}
-                sx={{
-                  p: 3,
-                  borderRadius: 3,
-                  background: 'rgba(31, 44, 62, 0.9)',
-                  backdropFilter: 'blur(10px)',
-                  border: '1px solid rgba(0, 188, 212, 0.2)',
-                }}
-              >
-               
-                {filesLoading ? (
-                  <Box sx={{ textAlign: 'center', mt: 5 }}>
-                    <CircularProgress sx={{ color: '#00bcd4' }} />
-                  </Box>
-                ) : filesError ? (
-                  <Typography color="error" sx={{ mb: 2, background: 'rgba(244, 67, 54, 0.2)', p: 2, borderRadius: 2 }}>
-                    {filesError}
-                  </Typography>
-                ) : Object.keys(resourcesByDepartment).length === 0 ? (
-                  <Typography sx={{ color: '#bbb' }}>No files available.</Typography>
-                ) : (
-                  Object.entries(resourcesByDepartment).map(([department, files]) => (
-                    <Box key={department} mb={3}>
-                      <Typography variant="subtitle1" sx={{ color: '#00bcd4', fontWeight: 'bold', mb: 2 }}>
-                        Department: {department}
-                      </Typography>
-                      <TableContainer sx={{ borderRadius: 2, overflow: 'hidden' }}>
-                        <Table size="small" stickyHeader>
-                          <TableHead>
-                            <TableRow sx={{ bgcolor: '#00bcd4' }}>
-                              <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Name</TableCell>
-                              <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Type</TableCell>
-                              <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Access Level</TableCell>
-                              <TableCell sx={{ color: '#fff', fontWeight: 'bold', textAlign: 'right' }}>Actions</TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {files.map(file => (
-                              <TableRow
-                                key={file.id}
-                                hover
-                                sx={{
-                                  '&:hover': { background: 'rgba(0, 188, 212, 0.2)' },
-                                  transition: 'background 0.3s',
-                                }}
-                              >
-                                <TableCell sx={{ color: '#fff' }}>{file.name}</TableCell>
-                                <TableCell sx={{ color: '#fff' }}>{file.is_folder ? 'Folder' : 'File'}</TableCell>
-                                <TableCell sx={{ color: '#fff' }}>{file.access_level}</TableCell>
-                                <TableCell sx={{ textAlign: 'right' }}>
-                                  <IconButton
-                                    color="primary"
-                                    onClick={() => openEditFileModal(file)}
-                                    size="small"
-                                    aria-label="edit file"
-                                    sx={{ '&:hover': { background: 'rgba(0, 188, 212, 0.3)' } }}
-                                  >
-                                    <Edit />
-                                  </IconButton>
-                                  <IconButton
-                                    color="error"
-                                    onClick={() => handleDeleteFile(file)}
-                                    size="small"
-                                    aria-label="delete file"
-                                    sx={{ '&:hover': { background: 'rgba(244, 67, 54, 0.3)' } }}
-                                  >
-                                    <Delete />
-                                  </IconButton>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </TableContainer>
-                      <Button
-                        variant="contained"
-                        color="primary"
-                        onClick={() => openAddFileModal(department)}
-                        sx={{ mt: 2, borderRadius: 2 }}
-                      >
-                        Add Resource
-                      </Button>
-                    </Box>
-                  ))
-                )}
-              </Paper>
+                    select size="small" label={`Set role for ${selectedIds.length}`}
+                    value={bulkRole} sx={{ minWidth: 240 }}
+                    onChange={(e) => setBulkRole(Number(e.target.value))}
+                  >
+                    {roles.map((r) => (
+                      <MenuItem key={r.id} value={r.id}>{r.name} · L{r.level}</MenuItem>
+                    ))}
+                  </TextField>
+                  <Button variant="contained" onClick={applyBulkRole} disabled={bulkRole === ''}>
+                    Apply
+                  </Button>
+                </>
+              )}
             </Stack>
-          )}
 
-          {/* User Modal */}
-          <Dialog
-            open={userModalOpen}
-            onClose={closeUserModal}
-            maxWidth="sm"
-            fullWidth
-            sx={{
-              '& .MuiDialog-paper': {
-                background: 'rgba(31, 44, 62, 0.95)',
-                backdropFilter: 'blur(10px)',
-                borderRadius: 3,
-                border: '1px solid rgba(0, 188, 212, 0.3)',
-                color: '#fff',
-              },
-            }}
-          >
-            <DialogTitle sx={{ color: '#00bcd4', fontWeight: 'bold' }}>
-              {userModalMode === 'add' ? 'Add New User' : `Edit User: ${editingUser?.email}`}
-            </DialogTitle>
-            <DialogContent dividers>
-              <Stack spacing={2} mt={1}>
-                <TextField
-                  label="Email"
-                  name="email"
-                  type="email"
-                  fullWidth
-                  value={userFormData.email}
-                  onChange={handleUserInputChange}
-                  required
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      color: '#fff',
-                      '& fieldset': { borderColor: 'rgba(0, 188, 212, 0.5)' },
-                      '&:hover fieldset': { borderColor: '#00bcd4' },
-                      '&.Mui-focused fieldset': { borderColor: '#00bcd4' },
-                    },
-                    '& .MuiInputLabel-root': { color: '#bbb', '&.Mui-focused': { color: '#00bcd4' } },
-                  }}
-                />
-                <TextField
-                  label="Full Name"
-                  name="full_name"
-                  fullWidth
-                  value={userFormData.full_name}
-                  onChange={handleUserInputChange}
-                  required
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      color: '#fff',
-                      '& fieldset': { borderColor: 'rgba(0, 188, 212, 0.5)' },
-                      '&:hover fieldset': { borderColor: '#00bcd4' },
-                      '&.Mui-focused fieldset': { borderColor: '#00bcd4' },
-                    },
-                    '& .MuiInputLabel-root': { color: '#bbb', '&.Mui-focused': { color: '#00bcd4' } },
-                  }}
-                />
-                <Select
-                  label="Department"
-                  name="department"
-                  value={userFormData.department}
-                  onChange={handleUserInputChange as (e: SelectChangeEvent<string>) => void}
-                  fullWidth
-                  required
-                  sx={{
-                    color: '#fff',
-                    '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(0, 188, 212, 0.5)' },
-                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00bcd4' },
-                    '.MuiSvgIcon-root': { color: '#fff' },
-                  }}
-                >
-                  <MenuItem value="">Select Department</MenuItem>
-                  <MenuItem value="IT">IT</MenuItem>
-                  <MenuItem value="Finance">Finance</MenuItem>
-                </Select>
-                <Select
-                  label="Group"
-                  name="group"
-                  value={userFormData.group}
-                  onChange={handleUserInputChange as (e: SelectChangeEvent<string>) => void}
-                  fullWidth
-                  required
-                  sx={{
-                    color: '#fff',
-                    '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(0, 188, 212, 0.5)' },
-                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00bcd4' },
-                    '.MuiSvgIcon-root': { color: '#fff' },
-                  }}
-                >
-                  <MenuItem value="">Select Group</MenuItem>
-                  <MenuItem value="intern">Intern</MenuItem>
-                  <MenuItem value="Regular Staff">Regular Staff</MenuItem>
-                  <MenuItem value="Department Leads">Department Leads</MenuItem>
-                  <MenuItem value="Managers">Managers</MenuItem>
-                </Select>
-                {userModalMode === 'edit' && (
-                  <Typography variant="caption" sx={{ color: '#bbb', mt: -1 }}>
-                    Leave password blank if you don't want to change it
-                  </Typography>
-                )}
-                <TextField
-                  label={userModalMode === 'add' ? 'Password' : 'New Password'}
-                  name="password"
-                  type="password"
-                  fullWidth
-                  value={userFormData.password}
-                  onChange={handleUserInputChange}
-                  required={userModalMode === 'add'}
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      color: '#fff',
-                      '& fieldset': { borderColor: 'rgba(0, 188, 212, 0.5)' },
-                      '&:hover fieldset': { borderColor: '#00bcd4' },
-                      '&.Mui-focused fieldset': { borderColor: '#00bcd4' },
-                    },
-                    '& .MuiInputLabel-root': { color: '#bbb', '&.Mui-focused': { color: '#00bcd4' } },
-                  }}
-                />
-                <FormControlLabel
-                  control={<Checkbox checked={userFormData.is_simulated_threat} onChange={handleUserCheckboxChange} name="is_simulated_threat" />}
-                  label="Simulate Insider Threat"
-                  sx={{ color: '#fff' }}
-                />
-              </Stack>
-              {usersError && (
-                <Typography color="error" mt={2} variant="body2" sx={{ background: 'rgba(244, 67, 54, 0.2)', p: 1, borderRadius: 2 }}>
-                  {usersError}
-                </Typography>
-              )}
-            </DialogContent>
-            <DialogActions sx={{ borderTop: '1px solid rgba(0, 188, 212, 0.2)' }}>
-              <Button onClick={closeUserModal} disabled={saving} sx={{ color: '#bbb' }}>
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSaveUser}
-                variant="contained"
-                color="primary"
-                disabled={saving}
-                sx={{ borderRadius: 2 }}
-              >
-                {saving ? <CircularProgress size={20} color="inherit" /> : 'Save'}
-              </Button>
-            </DialogActions>
-          </Dialog>
+            {usersError && <Alert severity="error" sx={{ mb: 2 }}>{usersError}</Alert>}
+            {usersLoading && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                <CircularProgress sx={{ color: tokens.accent }} />
+              </Box>
+            )}
 
-          {/* File Modal */}
-          <Dialog
-            open={fileModalOpen}
-            onClose={closeFileModal}
-            maxWidth="sm"
-            fullWidth
-            sx={{
-              '& .MuiDialog-paper': {
-                background: 'rgba(31, 44, 62, 0.95)',
-                backdropFilter: 'blur(10px)',
-                borderRadius: 3,
-                border: '1px solid rgba(0, 188, 212, 0.3)',
-                color: '#fff',
-              },
-            }}
-          >
-            <DialogTitle sx={{ color: '#00bcd4', fontWeight: 'bold' }}>
-              {fileModalMode === 'add' ? 'Add New Resource' : `Edit Resource: ${editingResource?.name}`}
-            </DialogTitle>
-            <DialogContent dividers>
-              <Stack spacing={2} mt={1}>
-                <TextField
-                  label="Name"
-                  name="name"
-                  fullWidth
-                  value={fileFormData.name}
-                  onChange={handleFileInputChange as (e: React.ChangeEvent<HTMLInputElement>) => void}
-                  required
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      color: '#fff',
-                      '& fieldset': { borderColor: 'rgba(0, 188, 212, 0.5)' },
-                      '&:hover fieldset': { borderColor: '#00bcd4' },
-                      '&.Mui-focused fieldset': { borderColor: '#00bcd4' },
-                    },
-                    '& .MuiInputLabel-root': { color: '#bbb', '&.Mui-focused': { color: '#00bcd4' } },
-                  }}
-                />
-                <TextField
-                  label="Department"
-                  name="department"
-                  fullWidth
-                  value={fileFormData.department}
-                  disabled
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      color: '#fff',
-                      '& fieldset': { borderColor: 'rgba(0, 188, 212, 0.5)' },
-                    },
-                    '& .MuiInputLabel-root': { color: '#bbb' },
-                  }}
-                />
-                <Select
-                  label="Access Level"
-                  name="access_level"
-                  value={fileFormData.access_level}
-                  onChange={handleFileInputChange as (e: SelectChangeEvent<string>) => void}
-                  fullWidth
-                  required
-                  sx={{
-                    color: '#fff',
-                    '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(0, 188, 212, 0.5)' },
-                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00bcd4' },
-                    '.MuiSvgIcon-root': { color: '#fff' },
-                  }}
-                >
-                  <MenuItem value="">Select Access Level</MenuItem>
-                  <MenuItem value="read">Read</MenuItem>
-                  <MenuItem value="write">Write</MenuItem>
-                  <MenuItem value="none">None</MenuItem>
-                </Select>
-                <FormControlLabel
-                  control={<Checkbox checked={fileFormData.is_folder} onChange={handleFileCheckboxChange} name="is_folder" />}
-                  label="Is Folder"
-                  sx={{ color: '#fff' }}
-                />
-              </Stack>
-              {filesError && (
-                <Typography color="error" mt={2} variant="body2" sx={{ background: 'rgba(244, 67, 54, 0.2)', p: 1, borderRadius: 2 }}>
-                  {filesError}
+            <Box sx={{ ...bezelShell, mb: 5 }}>
+              <TableContainer sx={{ ...bezelCore }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell padding="checkbox" />
+                      {['User', 'Department', 'Role', 'Simulated threat', 'Actions'].map((h) => (
+                        <TableCell key={h} sx={{ color: tokens.accent, fontWeight: 600 }}>{h}</TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {filteredUsers.map((user) => (
+                      <TableRow key={user.id} hover>
+                        <TableCell padding="checkbox">
+                          <Checkbox
+                            size="small" checked={selectedIds.includes(user.id)}
+                            onChange={(e) => setSelectedIds((prev) =>
+                              e.target.checked ? [...prev, user.id] : prev.filter((id) => id !== user.id))}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Stack direction="row" spacing={1.5} alignItems="center">
+                            <Avatar sx={{ width: 30, height: 30, fontSize: 12, background: tokens.accentDim, color: tokens.accent }}>
+                              {initials(user)}
+                            </Avatar>
+                            <Box>
+                              <Typography sx={{ fontSize: 14, color: tokens.text }}>{user.full_name || '—'}</Typography>
+                              <Typography sx={{ fontSize: 12, color: tokens.textFaint }}>{user.email}</Typography>
+                            </Box>
+                            {user.is_staff && (
+                              <Chip size="small" label="Admin" sx={{ fontSize: 10, height: 20, color: tokens.accent, background: tokens.accentDim }} />
+                            )}
+                          </Stack>
+                        </TableCell>
+                        <TableCell sx={{ color: tokens.textDim }}>{user.department || '—'}</TableCell>
+                        <TableCell>
+                          {user.role_name ? (
+                            <Stack direction="row" spacing={0.75} alignItems="center">
+                              <Typography sx={{ fontSize: 13, color: tokens.text }}>{user.role_name}</Typography>
+                              <Chip size="small" label={`L${user.role_level ?? '?'}`}
+                                sx={{ fontSize: 10, height: 18, color: tokens.textDim, background: tokens.surface }} />
+                            </Stack>
+                          ) : (
+                            <Tooltip title="No role: this account has no privileges">
+                              <Chip size="small" label="No role"
+                                sx={{ fontSize: 11, color: tokens.severity.high, background: `${tokens.severity.high}18` }} />
+                            </Tooltip>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Switchish checked={user.is_simulated_threat} onToggle={() => toggleSimulatedThreat(user)} />
+                        </TableCell>
+                        <TableCell>
+                          <Stack direction="row" spacing={0.5}>
+                            <Tooltip title="Edit">
+                              <IconButton size="small" sx={{ color: tokens.accent }} onClick={() => openEdit(user)}>
+                                <EditRoundedIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Delete">
+                              <IconButton size="small" sx={{ color: tokens.severity.critical }} onClick={() => deleteUser(user)}>
+                                <DeleteOutlineRoundedIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {!usersLoading && filteredUsers.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} align="center" sx={{ color: tokens.textFaint, py: 4 }}>
+                          No users found
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+
+            {/* -------------------------------------------------- resources */}
+            <Stack direction="row" spacing={1.5} sx={{ mb: 2, alignItems: 'center', flexWrap: 'wrap' }} useFlexGap>
+              <Typography variant="h5" sx={{ flexGrow: 1 }}>Files</Typography>
+              <UploadResourceButton
+                onUploaded={(created) => {
+                  loadResources();
+                  setAccessFor(created);
+                  show(`Uploaded ${created.name} — now set who can use it`, 'success');
+                }}
+                onError={(msg) => show(msg, 'error')}
+              />
+            </Stack>
+
+            {filesError && <Alert severity="error" sx={{ mb: 2 }}>{filesError}</Alert>}
+
+            {Object.entries(resourcesByDept).map(([department, files]) => (
+              <Box key={department} sx={{ mb: 3 }}>
+                <Typography variant="h6" sx={{ mb: 1.5, fontSize: 16, color: tokens.textDim }}>
+                  {department}
                 </Typography>
-              )}
-            </DialogContent>
-            <DialogActions sx={{ borderTop: '1px solid rgba(0, 188, 212, 0.2)' }}>
-              <Button onClick={closeFileModal} disabled={saving} sx={{ color: '#bbb' }}>
-                Cancel
-              </Button>
-              <Button
-                onClick={fileModalMode === 'add' ? handleAddFile : handleUpdateFile}
-                variant="contained"
-                color="primary"
-                disabled={saving}
-                sx={{ borderRadius: 2 }}
+                <Box sx={{ ...bezelShell }}>
+                  <TableContainer sx={{ ...bezelCore }}>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          {['Name', 'Type', 'Owner', 'Your access', 'Actions'].map((h) => (
+                            <TableCell key={h} sx={{ color: tokens.accent, fontWeight: 600 }}>{h}</TableCell>
+                          ))}
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {files.map((file) => {
+                          const access = file.access_for_current_user;
+                          return (
+                            <TableRow key={file.id} hover>
+                              <TableCell sx={{ color: tokens.text }}>{file.name}</TableCell>
+                              <TableCell sx={{ color: tokens.textDim }}>{file.is_folder ? 'Folder' : 'File'}</TableCell>
+                              <TableCell sx={{ color: tokens.textDim }}>{file.created_by ?? '—'}</TableCell>
+                              <TableCell sx={{ color: tokens.textDim }}>{access.replace('_', ' ')}</TableCell>
+                              <TableCell>
+                                <Stack direction="row" spacing={0.5}>
+                                  {can(access, 'delete') && (
+                                    <Tooltip title="Manage access">
+                                      <IconButton size="small" sx={{ color: tokens.accent }} onClick={() => setAccessFor(file)}>
+                                        <TuneRoundedIcon fontSize="small" />
+                                      </IconButton>
+                                    </Tooltip>
+                                  )}
+                                  {!file.is_folder && (can(access, 'download') ? (
+                                    <Tooltip title="Download">
+                                      <span>
+                                        <IconButton size="small" sx={{ color: tokens.accent }}
+                                          disabled={busyResourceId === file.id}
+                                          onClick={() => downloadResource(file)}>
+                                          {busyResourceId === file.id
+                                            ? <CircularProgress size={16} />
+                                            : <DownloadRoundedIcon fontSize="small" />}
+                                        </IconButton>
+                                      </span>
+                                    </Tooltip>
+                                  ) : (
+                                    <Tooltip title="Read-only: download not permitted">
+                                      <span>
+                                        <IconButton size="small" disabled>
+                                          <LockRoundedIcon fontSize="small" sx={{ color: tokens.textFaint }} />
+                                        </IconButton>
+                                      </span>
+                                    </Tooltip>
+                                  ))}
+                                  {can(access, 'delete') && (
+                                    <Tooltip title="Delete">
+                                      <IconButton size="small" sx={{ color: tokens.severity.critical }}
+                                        onClick={() => deleteResource(file)}>
+                                        <DeleteOutlineRoundedIcon fontSize="small" />
+                                      </IconButton>
+                                    </Tooltip>
+                                  )}
+                                </Stack>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Box>
+              </Box>
+            ))}
+
+            {!filesError && resources.length === 0 && (
+              <Typography sx={{ color: tokens.textFaint, textAlign: 'center', py: 4 }}>
+                No files yet. Upload one to get started.
+              </Typography>
+            )}
+
+            <FooterSection />
+          </Container>
+        </Box>
+
+        {/* --------------------------------------------------- user modal */}
+        <Dialog open={userModalOpen} onClose={() => setUserModalOpen(false)} fullWidth maxWidth="sm">
+          <DialogTitle>{editingUser ? `Edit ${editingUser.email}` : 'New user'}</DialogTitle>
+          <DialogContent>
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              <TextField fullWidth label="Email" type="email" value={userForm.email}
+                onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} />
+              <TextField fullWidth label="Full name" value={userForm.full_name}
+                onChange={(e) => setUserForm({ ...userForm, full_name: e.target.value })} />
+              <TextField select fullWidth label="Department" value={userForm.department}
+                onChange={(e) => setUserForm({ ...userForm, department: e.target.value })}>
+                <MenuItem value="">— None —</MenuItem>
+                {depts.map((d) => <MenuItem key={d.id} value={d.name}>{d.name}</MenuItem>)}
+              </TextField>
+              <TextField
+                select fullWidth label="Role" value={userForm.role}
+                helperText="Role determines what this person may do. Level 3+ can write and delete."
+                onChange={(e) => setUserForm({
+                  ...userForm,
+                  role: e.target.value === '' ? '' : Number(e.target.value),
+                })}
               >
-                {saving ? <CircularProgress size={20} color="inherit" /> : fileModalMode === 'add' ? 'Add' : 'Save'}
-              </Button>
-            </DialogActions>
-          </Dialog>
-        </Container>
-      </Box>
-      <FooterSection />
+                <MenuItem value="">— No role (no privileges) —</MenuItem>
+                {roles.map((r) => (
+                  <MenuItem key={r.id} value={r.id}>{r.name} · Level {r.level}</MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                fullWidth type="password" label={editingUser ? 'New password (optional)' : 'Password'}
+                value={userForm.password}
+                onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox checked={userForm.is_simulated_threat}
+                    onChange={(e) => setUserForm({ ...userForm, is_simulated_threat: e.target.checked })} />
+                }
+                label="Flag as simulated threat (for demonstrations)"
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button onClick={() => setUserModalOpen(false)}>Cancel</Button>
+            <Button variant="contained" onClick={saveUser} disabled={saving}>
+              {saving ? 'Saving…' : editingUser ? 'Save changes' : 'Create user'}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {accessFor && (
+          <EditAccessDialog
+            open={Boolean(accessFor)}
+            onClose={() => setAccessFor(null)}
+            resourceId={accessFor.id}
+            initialName={accessFor.name}
+            initialPath={accessFor.path}
+            onSaved={() => { loadResources(); setAccessFor(null); show('Access updated', 'success'); }}
+          />
+        )}
+
+        <Snackbar open={toast.open} autoHideDuration={4000}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          onClose={() => setToast({ ...toast, open: false })}>
+          <Alert severity={toast.severity} variant="filled"
+            onClose={() => setToast({ ...toast, open: false })}>
+            {toast.msg}
+          </Alert>
+        </Snackbar>
       </Box>
     </ThemeProvider>
+  );
+}
+
+/** Small inline toggle used in the users table. */
+function Switchish({ checked, onToggle }: { checked: boolean; onToggle: () => void }) {
+  return (
+    <Chip
+      size="small"
+      label={checked ? 'Yes' : 'No'}
+      onClick={onToggle}
+      sx={{
+        cursor: 'pointer', fontSize: 11, fontWeight: 600,
+        color: checked ? tokens.severity.high : tokens.textDim,
+        background: checked ? `${tokens.severity.high}18` : tokens.surface,
+        border: `1px solid ${checked ? `${tokens.severity.high}44` : tokens.hairline}`,
+      }}
+    />
   );
 }

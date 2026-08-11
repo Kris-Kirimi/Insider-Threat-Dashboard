@@ -128,12 +128,37 @@ pip install -r requirements.txt
 copy .env.example .env         # then edit .env (at minimum set SECRET_KEY)
 
 python manage.py migrate
-python manage.py seed_initial  # optional: seed departments/roles/admin
+python manage.py seed_initial     # required: departments + roles with levels
+python manage.py createsuperuser  # your admin account
 python manage.py runserver
+```
+
+`seed_initial` is not optional. Role levels (System Admin=4, Manager=3,
+Analyst=2, Employee=1) are what the permission layer compares against, so
+without them the manager-grade checks can never pass. Add `--demo` for sample
+employees, files and an example access revocation:
+
+```bash
+python manage.py seed_initial --demo
 ```
 
 By default (no `EMAIL_BACKEND` configured) OTP codes are printed to the
 runserver console, so you can log in without a working SMTP account.
+
+### Demonstrating detection
+
+Some detectors need activity that is tedious to produce by hand (six logins in
+ten minutes means six emailed OTP round trips). `simulate_threat` writes the
+same audit events those flows would, timed to land inside each detector's
+window:
+
+```bash
+python manage.py simulate_threat --user finance.employee@insider.local --scenario all --run-detections
+```
+
+Scenarios: `otp_bruteforce`, `rapid_login`, `unusual_hours`, `exfiltration`,
+`unauthorized`, `sequence`, or `all`. Add `--dry-run` to preview. It refuses to
+run with `DEBUG=False` unless you pass `--force`.
 
 ### Background workers
 
@@ -193,3 +218,42 @@ git-ignored.
 - Comprehensive audit logging with IP addresses
 - Continuous rule-based and ML-based threat detection
 - Secrets managed via environment variables
+
+## Authorization model
+
+Two distinct kinds of authority, deliberately kept separate:
+
+| Notion | Field | Governs |
+| ------ | ----- | ------- |
+| Administrator | `User.is_staff` | The `/dashboard` console and its APIs: audit logs, alerts, risk scores, account creation and deletion |
+| Privilege within a department | `Role.level` (1–4) | What you may do to your own department's resources. Write and delete need level ≥ 3 (Manager) |
+
+Resource access is decided by `RoleEnforcer` (`users/permissions.py`), most
+specific rule first. An explicit ACL entry is **authoritative** — a grant of
+`none` revokes access rather than falling through to a broader rule:
+
+1. Administrator → allowed
+2. Explicit per-user `AccessControl` → decides outright
+3. Explicit per-role `ResourceAccess` → decides outright
+4. Resource owner → allowed
+5. Same department → everyone reads; only level ≥ 3 writes or deletes
+6. Otherwise → denied
+
+Because DRF never runs object permissions on list endpoints, collection
+queries are additionally narrowed by `scope_resources_for()`
+(`users/scoping.py`) so employees cannot enumerate other departments' files.
+
+**Every denial is evidence.** A custom DRF exception handler
+(`users/exception_handlers.py`) records each 403 as an `unauthorized_access`
+audit row, which is exactly what `detect_unauthorized_access` consumes — so
+attempts to reach forbidden data become alerts rather than silent refusals.
+
+Tokens are only ever minted by `/api/auth/verify-otp/`; there is deliberately
+no password-grant endpoint, so the OTP second factor cannot be skipped.
+
+Regression tests for all of the above live in `users/tests_access.py` and
+`monitoring/tests_detection_e2e.py`:
+
+```bash
+python manage.py test
+```

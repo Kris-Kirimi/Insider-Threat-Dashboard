@@ -124,6 +124,10 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    # Records every 403 as an 'unauthorized_access' audit row. DRF raises
+    # PermissionDenied inside get_object(), before any view body runs, so this
+    # is the only place that sees all denials.
+    'EXCEPTION_HANDLER': 'users.exception_handlers.audited_exception_handler',
 }
 
 SIMPLE_JWT = {
@@ -236,4 +240,72 @@ CHANNEL_LAYERS = {
             'hosts': [REDIS_URL],
         },
     },
+}
+
+if TESTING:
+    # Tests must not require a running Redis to create an Alert.
+    CHANNEL_LAYERS = {'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'}}
+
+# ---------------------------------------------------------------------------
+# Detection engine tuning
+# ---------------------------------------------------------------------------
+# Thresholds are environment-overridable so a demo can be made easier to
+# trigger without editing code. Detectors read these at call time (not as
+# default arguments) so override_settings works in tests.
+
+
+def _env_int(name, default):
+    try:
+        return int(os.getenv(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+DETECTION = {
+    # Failed-OTP brute force. LOCKOUT must stay <= THRESHOLD: the view logs the
+    # locked-out attempt, so the alert fires on the same request that locks the
+    # account out. Making LOCKOUT smaller than THRESHOLD would make the
+    # detector unreachable again.
+    'OTP_LOCKOUT_THRESHOLD': _env_int('OTP_LOCKOUT_THRESHOLD', 5),
+    'OTP_FAILURE_THRESHOLD': _env_int('DETECT_OTP_FAILURES', 5),
+    'OTP_FAILURE_WINDOW_MINUTES': _env_int('DETECT_OTP_WINDOW', 15),
+
+    # Failed password logins. Same LOCKOUT <= THRESHOLD invariant as OTP: the
+    # login view logs the attempt it blocks, so the alert fires on the very
+    # request that engages the lockout. A smaller LOCKOUT would cap the
+    # failure count below what the detector must exceed, making it unreachable.
+    'LOGIN_LOCKOUT_THRESHOLD': _env_int('LOGIN_LOCKOUT_THRESHOLD', 5),
+    'LOGIN_FAILURE_THRESHOLD': _env_int('DETECT_LOGIN_FAILURES', 5),
+    'LOGIN_FAILURE_WINDOW_MINUTES': _env_int('DETECT_LOGIN_FAILURE_WINDOW', 15),
+
+    'RAPID_LOGIN_THRESHOLD': _env_int('DETECT_RAPID_LOGINS', 5),
+    'RAPID_LOGIN_WINDOW_MINUTES': _env_int('DETECT_RAPID_LOGIN_WINDOW', 10),
+
+    'DOWNLOAD_THRESHOLD': _env_int('DETECT_DOWNLOADS', 5),
+    'DOWNLOAD_WINDOW_MINUTES': _env_int('DETECT_DOWNLOAD_WINDOW', 5),
+
+    'UNAUTHORIZED_WINDOW_MINUTES': _env_int('DETECT_UNAUTH_WINDOW', 15),
+    'SEQUENCE_WINDOW_MINUTES': _env_int('DETECT_SEQUENCE_WINDOW', 10),
+
+    'UNUSUAL_HOUR_START': _env_int('DETECT_HOUR_START', 0),
+    'UNUSUAL_HOUR_END': _env_int('DETECT_HOUR_END', 6),
+    'UNUSUAL_HOUR_WINDOW_MINUTES': _env_int('DETECT_HOUR_WINDOW', 15),
+
+    'ALERT_DEDUP_MINUTES': _env_int('ALERT_DEDUP_MINUTES', 15),
+    'ESCALATION_DISTINCT_ALERTS': _env_int('ESCALATION_DISTINCT', 3),
+    'ESCALATION_WINDOW_MINUTES': _env_int('ESCALATION_WINDOW', 60),
+}
+
+# ---------------------------------------------------------------------------
+# Uploads
+# ---------------------------------------------------------------------------
+MAX_UPLOAD_BYTES = _env_int('MAX_UPLOAD_BYTES', 25 * 1024 * 1024)
+
+# Allow-list rather than a block-list. Django only serves MEDIA_URL when
+# DEBUG is on, but an uploaded .html or .svg would then execute as same-origin
+# content on the backend, and stored malware is a hazard regardless.
+ALLOWED_UPLOAD_EXTENSIONS = {
+    '.txt', '.md', '.csv', '.json', '.pdf',
+    '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+    '.png', '.jpg', '.jpeg', '.gif', '.zip',
 }

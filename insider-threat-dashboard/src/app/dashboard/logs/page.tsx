@@ -119,7 +119,7 @@ export default function InsiderThreatDashboard() {
     setLogsLoading(true);
     setLogsError('');
     try {
-      const res = await fetch(`${API_BASE}/api/users/audit/logs/`, {
+      const res = await fetch(`${API_BASE}/api/audit/logs/`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Failed to fetch logs');

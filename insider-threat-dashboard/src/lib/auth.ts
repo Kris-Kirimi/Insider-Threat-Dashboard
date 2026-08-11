@@ -7,7 +7,13 @@ export interface SessionUser {
   department: string | null;
   role: number | null;
   role_name: string | null;
+  role_level: number | null;
   is_staff: boolean;
+}
+
+/** Where a user's Settings page lives. */
+export function settingsRouteFor(user: SessionUser | null): string {
+  return user?.is_staff ? '/dashboard/settings' : '/employee/settings';
 }
 
 export function getSessionUser(): SessionUser | null {

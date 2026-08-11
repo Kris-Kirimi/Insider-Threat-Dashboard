@@ -76,6 +76,30 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return self.email
 
+class UserPreference(models.Model):
+    """Per-user notification and display settings.
+
+    Kept out of User so the toggle list can grow without touching the auth
+    model's migration history. Rows are created lazily by the preferences
+    endpoint, so existing accounts need no data migration.
+    """
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='preferences'
+    )
+    # Notifications
+    alert_emails = models.BooleanField(default=True)
+    activity_reports = models.BooleanField(default=False)
+    email_notifications = models.BooleanField(default=True)
+    # Display
+    show_help_tooltips = models.BooleanField(default=True)
+    compact_tables = models.BooleanField(default=False)
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Preferences for {self.user.email}"
+
+
 # -------------------
 # OTP Model
 # -------------------

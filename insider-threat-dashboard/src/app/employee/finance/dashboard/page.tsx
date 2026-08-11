@@ -3,15 +3,8 @@
 import React from 'react';
 import DepartmentFilesPage from '@/app/components/DepartmentFilesPage';
 
-// Finance department id in the seeded database.
-const FINANCE_DEPT_ID = 1;
-
 export default function FinanceDashboardPage() {
-  return (
-    <DepartmentFilesPage
-      departmentName="Finance Department"
-      departmentId={FINANCE_DEPT_ID}
-      accent="#00bcd4"
-    />
-  );
+  // Addressed by name rather than a hardcoded id, so the page does not depend
+  // on seed ordering.
+  return <DepartmentFilesPage departmentName="Finance" accent="#00bcd4" />;
 }

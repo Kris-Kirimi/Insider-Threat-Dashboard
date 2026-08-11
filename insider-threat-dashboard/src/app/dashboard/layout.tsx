@@ -3,30 +3,44 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, CircularProgress, Typography } from '@mui/material';
-import { getSessionUser, routeForUser } from '@/lib/auth';
+import { apiGet } from '@/lib/api';
+import { routeForUser, SessionUser } from '@/lib/auth';
 
 /**
- * Guards every /dashboard/* route. The admin console is staff-only: an
- * ordinary employee who navigates here directly is bounced to their own
- * department view, and a signed-out visitor is sent to login. This is the
- * client-side half of the check — the API also rejects non-staff on the
- * admin endpoints (audit logs, alerts, risk scores) with 403.
+ * Guards every /dashboard/* route.
+ *
+ * The check asks the server who you are rather than trusting the cached user
+ * in localStorage, which anyone can edit. This is only the cosmetic half:
+ * the admin APIs (audit logs, alerts, risk scores) independently reject
+ * non-staff with 403, and every such denial is recorded as an
+ * `unauthorized_access` audit event.
  */
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [state, setState] = useState<'checking' | 'allowed'>('checking');
 
   useEffect(() => {
-    const user = getSessionUser();
-    if (!user) {
-      router.replace('/login');
-      return;
-    }
-    if (!user.is_staff) {
-      router.replace(routeForUser(user));
-      return;
-    }
-    setState('allowed');
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const me = await apiGet<SessionUser>('/users/me/');
+        if (cancelled) return;
+
+        // Keep the cached copy in step with the server's answer.
+        localStorage.setItem('user', JSON.stringify(me));
+
+        if (me?.is_staff) {
+          setState('allowed');
+        } else {
+          router.replace(routeForUser(me));
+        }
+      } catch {
+        if (!cancelled) router.replace('/login');
+      }
+    })();
+
+    return () => { cancelled = true; };
   }, [router]);
 
   if (state === 'checking') {

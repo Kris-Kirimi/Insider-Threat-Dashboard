@@ -22,4 +22,6 @@ class EvidenceLogSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AuditLog
-        fields = ['id', 'actor', 'action', 'resource', 'ip_address', 'timestamp']
+        # metadata carries the denial context (path, method, view) recorded by
+        # the audited exception handler, which is what an investigator needs.
+        fields = ['id', 'actor', 'action', 'resource', 'ip_address', 'metadata', 'timestamp']

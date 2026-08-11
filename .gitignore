@@ -35,3 +35,6 @@ Thumbs.db
 
 # Project report (contains personal info)
 *.pdf
+
+.claude/
+.github/
